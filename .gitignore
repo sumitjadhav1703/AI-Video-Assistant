@@ -1,0 +1,15 @@
+# Secrets — never commit
+.env
+cookies.txt
+.streamlit/secrets.toml
+frontend/.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Transient artifacts (audio is processed then discarded; nothing here is durable)
+downloades/
+vector_db/

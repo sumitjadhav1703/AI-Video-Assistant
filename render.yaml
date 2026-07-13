@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: ai-video-assistant-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      # Values are set in the Render dashboard — never committed here.
+      - key: MISTRAL_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: SARVAM_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: YT_DLP_COOKIES_PATH
+        sync: false

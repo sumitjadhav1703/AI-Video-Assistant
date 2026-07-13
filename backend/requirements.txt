@@ -1,0 +1,36 @@
+# ── AI Video Assistant — BACKEND (FastAPI on Render) ──────────────────────────
+# Python >= 3.10. Deliberately contains no torch / openai-whisper / chromadb /
+# sentence-transformers: that stack is ~2GB against Render's 512MB free tier.
+# Speech-to-text is hosted (Groq), embeddings are hosted (Mistral).
+
+# ── Web framework ─────────────────────────────────────────────────────────────
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9           # Required for file uploads / form fields
+
+# ── Audio acquisition ─────────────────────────────────────────────────────────
+yt-dlp>=2024.4.9                  # Download audio from YouTube URLs
+pydub>=0.25.1                     # Audio conversion / chunking (needs FFmpeg binary)
+# pydub imports stdlib `audioop`, which PEP 594 removed in Python 3.13. The
+# Dockerfile pins 3.11, but this keeps pydub working on newer local interpreters.
+audioop-lts>=0.2.1; python_version >= "3.13"
+
+# ── Speech-to-Text (hosted) ───────────────────────────────────────────────────
+groq>=0.9.0                       # whisper-large-v3-turbo for English
+requests>=2.32.0                  # Sarvam STT-translate for Hinglish
+
+# ── LLM Orchestration — LangChain LCEL + Mistral ──────────────────────────────
+langchain>=0.2.0
+langchain-core>=0.2.0
+langchain-community>=0.2.0
+langchain-mistralai>=0.1.0        # Chat + mistral-embed embeddings
+langchain-text-splitters>=0.2.0
+
+# ── Vector store — Neon Postgres + pgvector ───────────────────────────────────
+langchain-postgres>=0.0.12
+psycopg[binary]>=3.1.0
+pgvector>=0.2.5
+sqlalchemy>=2.0.0
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+python-dotenv>=1.0.0
