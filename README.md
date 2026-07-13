@@ -1,7 +1,17 @@
-# AI Video Assistant 🎬
+<div align="center">
+
+# 🎬 AI Video Assistant
+
+**Transform your audio, video, and YouTube links into actionable insights with the power of LLMs & RAG.**
+
+[![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
+[![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=Streamlit&logoColor=white)](https://streamlit.io/)
+[![Mistral](https://img.shields.io/badge/Mistral_AI-000?style=for-the-badge&logo=mistral)](https://mistral.ai/)
+[![Neon](https://img.shields.io/badge/Neon-00E599?style=for-the-badge&logo=postgresql&logoColor=black)](https://neon.tech/)
+
+</div>
 
 AI Video Assistant is an intelligent pipeline that takes a YouTube URL or an uploaded audio/video file, transcribes it, generates summaries, extracts actionable items, and provides a RAG (Retrieval-Augmented Generation) chat interface to converse with the transcript.
-
 The system is designed with a microservices architecture, separating a robust FastAPI backend from an interactive Streamlit frontend.
 
 ---
@@ -9,55 +19,69 @@ The system is designed with a microservices architecture, separating a robust Fa
 ## 🏗️ Architecture Flow
 
 ```mermaid
-graph TD
-    %% Frontend Components
-    subgraph Frontend [Streamlit App]
-        UI[User Interface]
-        Chat[RAG Chat Interface]
-        UI -->|Upload File or YouTube URL| API_Start[POST /jobs]
-        UI -->|Poll Status| API_Status[GET /jobs/{job_id}]
-        UI -->|Fetch Results| API_Result[GET /jobs/{job_id}/result]
-        Chat -->|Ask Question| API_Chat[POST /jobs/{job_id}/chat]
+flowchart TD
+    %% Styling
+    classDef frontend fill:#FF4B4B,stroke:#333,stroke-width:2px,color:#fff,rx:5px,ry:5px
+    classDef backend fill:#005571,stroke:#333,stroke-width:2px,color:#fff,rx:5px,ry:5px
+    classDef external fill:#2c3e50,stroke:#333,stroke-width:2px,color:#fff,rx:5px,ry:5px
+    classDef database fill:#00E599,stroke:#333,stroke-width:2px,color:#000,rx:5px,ry:5px
+    classDef apiEndpoint fill:#f39c12,stroke:#333,stroke-width:2px,color:#fff,rx:5px,ry:5px
+
+    %% Nodes
+    subgraph Frontend_App ["📱 Streamlit Frontend App"]
+        direction TB
+        UI["🖥️ User Interface"]:::frontend
+        Chat["💬 RAG Chat Interface"]:::frontend
     end
 
-    %% Backend Components
-    subgraph Backend [FastAPI Backend]
-        API[API Gateway]
-        JobManager[Background Job Manager]
-        AudioProc[Audio Processor & Chunking]
-        Transcriber[Transcriber Router]
-        LLM[Summarizer & Extractor]
-        RAG[RAG Engine]
+    subgraph Backend_App ["⚙️ FastAPI Backend"]
+        direction TB
+        API_Start["🚀 POST /jobs"]:::apiEndpoint
+        API_Status["⏳ GET /jobs/{id}"]:::apiEndpoint
+        API_Result["✅ GET /jobs/{id}/result"]:::apiEndpoint
+        API_Chat["💬 POST /jobs/{id}/chat"]:::apiEndpoint
 
-        API_Start --> API
-        API_Status --> API
-        API_Result --> API
-        API_Chat --> API
-
-        API --> JobManager
-        JobManager --> AudioProc
-        JobManager --> Transcriber
-        JobManager --> LLM
-        JobManager --> RAG
+        Gateway["🔌 API Gateway"]:::backend
+        JobManager["📋 Job Manager"]:::backend
+        AudioProc["🎵 Audio Processor"]:::backend
+        Transcriber["✍️ Transcriber"]:::backend
+        LLMEngine["🧠 LLM Engine"]:::backend
+        RAGEngine["🔍 RAG Engine"]:::backend
     end
 
-    %% External Services
-    subgraph External APIs
-        YT[YouTube]
-        Groq[Groq API - English Whisper]
-        Sarvam[Sarvam API - Hinglish]
-        Mistral[Mistral AI - LLM & Embeddings]
-        Neon[(Neon Serverless Postgres)]
+    subgraph External_Services ["🌐 External APIs & Services"]
+        direction TB
+        YT["▶️ YouTube"]:::external
+        Groq["⚡ Groq API (English)"]:::external
+        Sarvam["🗣️ Sarvam API (Hinglish)"]:::external
+        Mistral["🤖 Mistral AI (LLM & Embed)"]:::external
+        Neon[("🐘 Neon Postgres (pgvector)")]:::database
     end
 
-    %% Data Flow
-    AudioProc -.->|yt-dlp| YT
-    Transcriber -.->|English| Groq
-    Transcriber -.->|Hinglish| Sarvam
-    LLM -.->|Mistral-small-latest| Mistral
-    RAG -.->|Mistral-embed| Mistral
-    JobManager -->|Status/Results| Neon
-    RAG -->|pgvector chunks| Neon
+    %% Connections
+    UI -->|"Upload/URL"| API_Start
+    UI -->|"Poll Status"| API_Status
+    UI -->|"Fetch Results"| API_Result
+    Chat -->|"Ask Question"| API_Chat
+
+    API_Start --> Gateway
+    API_Status --> Gateway
+    API_Result --> Gateway
+    API_Chat --> Gateway
+
+    Gateway --> JobManager
+    JobManager --> AudioProc
+    JobManager --> Transcriber
+    JobManager --> LLMEngine
+    JobManager --> RAGEngine
+
+    AudioProc -.->|"yt-dlp"| YT
+    Transcriber -.->|"Whisper"| Groq
+    Transcriber -.->|"Speech-to-Text"| Sarvam
+    LLMEngine -.->|"Summarize/Extract"| Mistral
+    RAGEngine -.->|"Embeddings"| Mistral
+    JobManager -->|"Status/Results"| Neon
+    RAGEngine <-->|"Vector Chunks"| Neon
 ```
 
 ---
