@@ -383,17 +383,25 @@ with st.sidebar:
     st.markdown('<span class="badge badge-purple">Input</span>', unsafe_allow_html=True)
 
     # A file path is meaningless now that the backend runs on another machine —
-    # the file has to be uploaded to it.
-    input_mode = st.radio("Source", ["YouTube URL", "Upload file"], horizontal=True)
+    # the file has to be uploaded to it. Upload leads because the YouTube path
+    # cannot work from a cloud host (see the caption below).
+    input_mode = st.radio("Source", ["Upload file", "YouTube URL"], horizontal=True)
 
     youtube_url = None
     upload = None
-    if input_mode == "YouTube URL":
-        youtube_url = st.text_input("YouTube URL", placeholder="https://youtube.com/watch?v=...")
-    else:
+    if input_mode == "Upload file":
         upload = st.file_uploader(
             "Audio or video file",
             type=["mp3", "wav", "m4a", "mp4", "mov", "mkv", "webm", "aac", "ogg", "flac"],
+        )
+    else:
+        youtube_url = st.text_input("YouTube URL", placeholder="https://youtube.com/watch?v=...")
+        st.caption(
+            "⚠️ **Blocked on the hosted demo.** YouTube rejects downloads from "
+            "cloud/datacenter IP ranges with a *“Sign in to confirm you’re not a bot”* "
+            "check, so this path fails on the deployed backend. It works normally when "
+            "you run the project on your own machine, which has a residential IP. "
+            "**On the demo, use Upload file instead.**"
         )
 
     language = st.selectbox("Language", ["english", "hinglish"], index=0)
@@ -638,7 +646,9 @@ else:
             Ready to Analyse
         </div>
         <div style="color:var(--text-muted);font-size:0.85rem;max-width:380px;line-height:1.7">
-            Paste a YouTube URL or upload an audio/video file in the sidebar, choose your language, and hit <strong>Analyse</strong> to get started.
+            Upload an audio/video file in the sidebar, choose your language, and hit <strong>Analyse</strong> to get started.
+            <br><br>
+            <span style="font-size:0.78rem;opacity:0.8">YouTube URLs work when you run this locally, but are blocked on the hosted demo — YouTube rejects downloads from datacenter IPs.</span>
         </div>
         <div style="margin-top:2rem;display:flex;gap:1rem;flex-wrap:wrap;justify-content:center">
             <span class="badge badge-purple">Transcription</span>

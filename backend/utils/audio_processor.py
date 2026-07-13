@@ -23,6 +23,20 @@ def _cookie_opts() -> dict:
     return {}
 
 
+BOT_CHECK_MESSAGE = (
+    "YouTube blocked this download. It serves a \"Sign in to confirm you're not a bot\" "
+    "challenge to cloud/datacenter IP ranges, which is what the hosted backend runs on. "
+    "This is a restriction on YouTube's side, not a fault in the pipeline — the same URL "
+    "downloads fine when the backend runs on a home/residential connection. "
+    "Upload the audio or video file directly instead."
+)
+
+
+def _is_bot_check(err: Exception) -> bool:
+    text = str(err).lower()
+    return "confirm you" in text and "bot" in text
+
+
 def download_youtube_audio(url :str) ->str:
     output_path = os.path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s")
     ydl_opts = {
@@ -38,9 +52,16 @@ def download_youtube_audio(url :str) ->str:
         "quiet": True,
         **_cookie_opts(),
     }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-        filename = ydl.prepare_filename(info).replace(".webm", ".wav").replace(".m4a", ".wav")
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            filename = ydl.prepare_filename(info).replace(".webm", ".wav").replace(".m4a", ".wav")
+    except yt_dlp.utils.DownloadError as err:
+        # Surface the bot check as a plain explanation rather than a yt-dlp traceback;
+        # the job's error field is rendered verbatim in the UI.
+        if _is_bot_check(err):
+            raise RuntimeError(BOT_CHECK_MESSAGE) from err
+        raise
     return filename
 
 

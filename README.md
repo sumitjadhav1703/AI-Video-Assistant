@@ -152,12 +152,12 @@ docker build -t ai-video-backend .
 docker run -p 8000:8000 --env-file .env ai-video-backend
 ```
 
-*Alternatively, run natively:*
+*Alternatively, run natively (from the repo root — the backend is a package, so
+`backend.api` is the correct import path):*
 ```bash
-cd backend
-pip install -r requirements.txt
-# Ensure ffmpeg is installed via your OS package manager
-uvicorn api:app --host 0.0.0.0 --port 8000 --reload
+pip install -r backend/requirements.txt
+# Ensure ffmpeg is installed via your OS package manager (e.g. brew install ffmpeg)
+uvicorn backend.api:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ### 3. Frontend Setup
@@ -188,5 +188,30 @@ This architecture is optimized for free-tier cloud deployment:
 
 ## ⚠️ Known Limitations & Notes
 
-- **YouTube Throttling:** Downloading from YouTube via datacenter IPs may fail with bot-detection. Using a `cookies.txt` file (configured via `YT_DLP_COOKIES_PATH`) mitigates this but does not guarantee success.
+### YouTube URLs do not work on the hosted demo (they work locally)
+
+YouTube serves a **"Sign in to confirm you're not a bot"** challenge to requests coming from cloud and
+datacenter IP ranges. Render runs on exactly such a range, so the YouTube path fails on the deployed
+backend. **Run this project on your own machine and YouTube works fine**, because a home connection
+has a residential IP that YouTube trusts.
+
+This is a restriction on YouTube's side, not a defect in the pipeline. The UI states this plainly on
+the YouTube input, and the backend translates yt-dlp's bot-check error into a readable explanation
+rather than a traceback.
+
+The workarounds were all evaluated and deliberately not taken for a free-tier demo:
+
+| Workaround | Why not |
+|---|---|
+| Residential proxy (Bright Data, IPRoyal, …) | Works reliably, but costs money per GB. |
+| Exported `cookies.txt` from a throwaway account | Free, but cookies expire within days and datacenter IPs still get challenged. Supported anyway — set `YT_DLP_COOKIES_PATH`. |
+| [PO token provider (bgutil)](https://github.com/Brainicism/bgutil-ytdlp-pot-provider) | Makes traffic look more legitimate; its own docs note it does not guarantee a bypass. |
+| Cloudflare WARP tunnel | Effective, but needs `NET_ADMIN` container privileges that Render's free tier does not grant. |
+
+**File upload is the supported path on the demo** and works end to end.
+
+### Other notes
+
+- **Cold starts:** Render's free tier sleeps the backend after 15 minutes idle; the first request afterwards takes up to ~60s. The frontend surfaces this as a "waking up" message rather than an error.
 - **Ephemeral Storage:** Audio files are heavily chunked to fit API payload limits (e.g., Groq's 25MB cap) and are immediately deleted post-transcription. No raw audio is persistently stored.
+- **CORS:** `FRONTEND_ORIGIN` must be the exact origin with **no trailing slash** — browsers never send one, so a trailing slash silently blocks every request.
