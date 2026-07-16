@@ -22,11 +22,21 @@ const TODAY = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 's
 export default function Results({ result, meta, chat, onAsk }) {
   const [transcriptOpen, setTranscriptOpen] = useState(false);
 
+  // The backend emits a "No … found." placeholder string when the LLM extracts
+  // nothing. Detect it so we render a clean empty state instead of a fake "01"
+  // list item that reads as broken.
+  const EMPTY_RE = /^no\b.*\bfound\.?$/i;
+  const buildGroup = (label, raw, emptyNote) => {
+    const items = toItems(raw);
+    const empty = items.length === 0 || (items.length === 1 && EMPTY_RE.test(items[0]));
+    return { label, items: empty ? [] : items, empty, emptyNote };
+  };
+
   const groups = [
-    { label: 'Action items', items: toItems(result.action_items) },
-    { label: 'Key decisions', items: toItems(result.key_decisions) },
-    { label: 'Open questions', items: toItems(result.open_questions) },
-  ].filter((g) => g.items.length);
+    buildGroup('Action items', result.action_items, 'Nothing to action from this one.'),
+    buildGroup('Key decisions', result.key_decisions, 'No decisions were made on the record.'),
+    buildGroup('Open questions', result.open_questions, 'Nothing was left open.'),
+  ];
 
   const metaBits = [
     meta.fileName,
@@ -117,6 +127,21 @@ export default function Results({ result, meta, chat, onAsk }) {
               <span style={LABEL}>{g.label}</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', maxWidth: 760 }}>
+              {g.empty && (
+                <div style={{ padding: '20px 0' }}>
+                  <span
+                    style={{
+                      fontFamily: SANS,
+                      fontSize: 'clamp(16px,1.5vw,19px)',
+                      lineHeight: 1.4,
+                      letterSpacing: '-0.005em',
+                      color: MUTE,
+                    }}
+                  >
+                    {g.emptyNote}
+                  </span>
+                </div>
+              )}
               {g.items.map((text, i) => (
                 <div
                   key={i}
