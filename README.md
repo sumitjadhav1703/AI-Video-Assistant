@@ -101,7 +101,7 @@ flowchart TD
 
 ### Backend
 - **Framework:** FastAPI, Uvicorn
-- **Audio Processing:** yt-dlp, pydub, ffmpeg
+- **Audio Processing:** yt-dlp, ffmpeg (single streaming pass decodes + chunks at flat memory, so long files fit the 512MB free tier), pydub
 - **AI/LLM:** LangChain LCEL, Mistral AI (LLM & Embeddings), Groq (STT), Sarvam (STT)
 - **Database & Vectors:** Neon (Serverless Postgres), pgvector, SQLAlchemy
 
@@ -142,6 +142,9 @@ Ensure `.env` contains:
 - `DATABASE_URL`
 - `FRONTEND_ORIGIN` (Optional for local dev, needed for production CORS)
 - `YT_DLP_COOKIES_PATH` (Optional, path to cookies to mitigate YouTube rate-limiting)
+- `MAX_UPLOAD_MB` (Optional, default `200` — uploads over this get a clean `413`)
+- `HF_TOKEN` (Optional — silences the "unauthenticated requests to the HF Hub" warning from the embeddings tokenizer download)
+- `ADMIN_TOKEN` (Optional — enables the token-gated `/admin/cleanup` endpoint; unset means the endpoint stays disabled)
 
 ### 2. Backend Setup (Docker recommended)
 
@@ -189,6 +192,27 @@ This architecture is optimized for free-tier cloud deployment:
 - **Backend:** Deploy the FastAPI app using the provided `Dockerfile` to a service like **Render** or Railway. The long-running nature of processing videos utilizes asynchronous background tasks to prevent HTTP timeouts.
 - **Frontend:** Deploy the `web/` React app to **Vercel** — import the repo, set **Root Directory** to `web` (framework auto-detects as Vite), and add **`VITE_BACKEND_URL`** = the backend URL. Then add the resulting Vercel origin to the backend's `FRONTEND_ORIGIN` (comma-separated, **no trailing slash**) so CORS admits it.
 - **Database:** **Neon** Serverless Postgres perfectly handles the relational states and vector storage via `pgvector`.
+- **Scheduled cleanup:** A GitHub Actions workflow (`.github/workflows/cleanup.yml`) calls `POST /admin/cleanup?older_than_days=15` daily to purge old jobs and their vector collections. It authenticates with an `ADMIN_TOKEN` repo secret that must match the backend's `ADMIN_TOKEN` env var. Set both to the same value; adjust the retention window or `cron` schedule in the workflow as needed.
+
+---
+
+## 🗑️ Data Lifecycle
+
+Transcripts, summaries, findings, and vectors for a job live in Neon only until the job is released. A job is deleted (`DELETE /jobs/{id}` → job row + its `pgvector` collection) in three ways:
+
+- **New session / reset** in the UI.
+- **Tab close or refresh** — a `pagehide` handler fires a `keepalive` `DELETE` so a session never orphans its data.
+- **The scheduled cron** (above), which sweeps anything older than 15 days that slipped through — e.g. a browser killed before the unload request flushed.
+
+To purge on demand, call the endpoint directly (never commit the token or paste it in chat):
+
+```bash
+curl -X POST "https://<backend-url>/admin/cleanup?older_than_days=15" \
+  -H "X-Admin-Token: $ADMIN_TOKEN"
+# → {"deleted": N, "older_than_days": 15}
+```
+
+`older_than_days=0` purges everything. Returns `503` if `ADMIN_TOKEN` is unset, `401` on a bad token.
 
 ---
 
@@ -219,5 +243,7 @@ The workarounds were all evaluated and deliberately not taken for a free-tier de
 ### Other notes
 
 - **Cold starts:** Render's free tier sleeps the backend after 15 minutes idle; the first request afterwards takes up to ~60s. The frontend surfaces this as a "waking up" message rather than an error.
+- **Memory:** Audio is decoded and chunked in a single streaming `ffmpeg` pass (`-vn -ac 1 -ar 16000 -f segment`), so memory stays flat regardless of length. This replaced an in-memory `pydub` path that loaded the whole file's PCM into RAM twice and exceeded Render's 512MB limit on long uploads.
+- **Upload cap:** Uploads are capped at `MAX_UPLOAD_MB` (default 200). The backend streams the upload to disk in bounded reads and returns a clean `413` when exceeded; the frontend blocks oversized files before upload.
 - **Ephemeral Storage:** Audio files are heavily chunked to fit API payload limits (e.g., Groq's 25MB cap) and are immediately deleted post-transcription. No raw audio is persistently stored.
 - **CORS:** `FRONTEND_ORIGIN` must be the exact origin with **no trailing slash** — browsers never send one, so a trailing slash silently blocks every request.
