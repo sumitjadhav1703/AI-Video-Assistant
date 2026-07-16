@@ -119,3 +119,13 @@ def delete_job_row(job_id: str) -> None:
     with connect() as conn, conn.cursor() as cur:
         cur.execute("DELETE FROM jobs WHERE id=%s", (job_id,))
         conn.commit()
+
+
+def job_ids_older_than(days: int) -> list[str]:
+    """Ids of jobs created more than `days` ago — the cleanup sweep's work list."""
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT id FROM jobs WHERE created_at < NOW() - make_interval(days => %s)",
+            (days,),
+        )
+        return [row["id"] for row in cur.fetchall()]

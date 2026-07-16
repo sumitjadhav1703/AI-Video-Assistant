@@ -1,10 +1,11 @@
+import hmac
 import os
 import tempfile
 import uuid
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -21,6 +22,10 @@ load_dotenv()
 MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "200"))
 MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 _COPY_CHUNK = 1024 * 1024  # 1MB reads keep the copy itself memory-flat
+
+# Shared secret for the destructive /admin/cleanup endpoint. When unset the
+# endpoint refuses every call, so cleanup is opt-in via the Render dashboard.
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "").strip()
 
 
 @asynccontextmanager
@@ -171,3 +176,36 @@ def delete_job(job_id: str):
     delete_vector_store(job_id)
     db.delete_job_row(job_id)
     return {"job_id": job_id, "deleted": True}
+
+
+@app.post("/admin/cleanup")
+def admin_cleanup(
+    older_than_days: int = 7,
+    x_admin_token: str | None = Header(default=None),
+):
+    """
+    Purge jobs older than `older_than_days` (their DB row + pgvector collection).
+    Orphaned data accumulates when a session is closed without the normal release
+    (e.g. a browser killed before the unload DELETE flushes). Gated behind
+    ADMIN_TOKEN so it is never publicly callable.
+    """
+    if not ADMIN_TOKEN:
+        raise HTTPException(503, "Cleanup is disabled — set ADMIN_TOKEN to enable it.")
+    if not x_admin_token or not hmac.compare_digest(x_admin_token, ADMIN_TOKEN):
+        raise HTTPException(401, "Invalid or missing admin token.")
+    if older_than_days < 0:
+        raise HTTPException(400, "older_than_days must be >= 0.")
+
+    job_ids = db.job_ids_older_than(older_than_days)
+    deleted = 0
+    for jid in job_ids:
+        # Vectors first (best-effort — a job that failed before RAG has no
+        # collection), then the row. One bad job never stalls the sweep.
+        try:
+            delete_vector_store(jid)
+        except Exception as e:
+            print(f"cleanup: could not drop vectors for {jid}: {e}")
+        db.delete_job_row(jid)
+        deleted += 1
+
+    return {"deleted": deleted, "older_than_days": older_than_days}
