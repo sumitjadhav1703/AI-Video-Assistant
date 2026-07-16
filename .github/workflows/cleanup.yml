@@ -1,0 +1,30 @@
+name: Purge old jobs
+
+# Deletes jobs (and their pgvector collections) older than 15 days by calling the
+# backend's token-gated /admin/cleanup endpoint. Runs on a schedule so orphaned
+# data never piles up in Neon, and can also be triggered by hand.
+on:
+  schedule:
+    - cron: '0 3 * * *' # daily at 03:00 UTC
+  workflow_dispatch: {} # manual "Run workflow" button
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call /admin/cleanup (older_than_days=15)
+        env:
+          # Set these in the repo: Settings -> Secrets and variables -> Actions.
+          # BACKEND_URL is optional; it falls back to the known Render URL.
+          BACKEND_URL: ${{ secrets.BACKEND_URL || 'https://ai-video-assistant-backend.onrender.com' }}
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          if [ -z "$ADMIN_TOKEN" ]; then
+            echo "ADMIN_TOKEN secret is not set — add it in repo Actions secrets." >&2
+            exit 1
+          fi
+          # --retry handles Render free-tier cold starts (the service may be asleep).
+          curl -fsS -X POST \
+            --retry 5 --retry-all-errors --retry-delay 30 --max-time 180 \
+            "$BACKEND_URL/admin/cleanup?older_than_days=15" \
+            -H "X-Admin-Token: $ADMIN_TOKEN"
