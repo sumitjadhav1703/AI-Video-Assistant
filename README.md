@@ -5,14 +5,15 @@
 **Transform your audio, video, and YouTube links into actionable insights with the power of LLMs & RAG.**
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=for-the-badge&logo=Streamlit&logoColor=white)](https://streamlit.io/)
+[![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://react.dev/)
+[![Vercel](https://img.shields.io/badge/Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://vercel.com/)
 [![Mistral](https://img.shields.io/badge/Mistral_AI-000?style=for-the-badge&logo=mistral)](https://mistral.ai/)
 [![Neon](https://img.shields.io/badge/Neon-00E599?style=for-the-badge&logo=postgresql&logoColor=black)](https://neon.tech/)
 
 </div>
 
 AI Video Assistant is an intelligent pipeline that takes a YouTube URL or an uploaded audio/video file, transcribes it, generates summaries, extracts actionable items, and provides a RAG (Retrieval-Augmented Generation) chat interface to converse with the transcript.
-The system is designed with a microservices architecture, separating a robust FastAPI backend from an interactive Streamlit frontend.
+The system is designed with a microservices architecture, separating a robust FastAPI backend from a React (Vite) frontend deployed on Vercel.
 
 ---
 
@@ -28,7 +29,7 @@ flowchart TD
     classDef apiEndpoint fill:#f39c12,stroke:#333,stroke-width:2px,color:#fff,rx:5px,ry:5px
 
     %% Nodes
-    subgraph Frontend_App ["📱 Streamlit Frontend App"]
+    subgraph Frontend_App ["📱 React Frontend · Vercel"]
         direction TB
         UI["🖥️ User Interface"]:::frontend
         Chat["💬 RAG Chat Interface"]:::frontend
@@ -105,7 +106,9 @@ flowchart TD
 - **Database & Vectors:** Neon (Serverless Postgres), pgvector, SQLAlchemy
 
 ### Frontend
-- **Framework:** Streamlit
+- **Framework:** React 18 + Vite (static SPA)
+- **Hosting:** Vercel
+- **Backend calls:** `fetch` to the FastAPI service; dev uses a Vite proxy so local development works without a CORS change
 
 ---
 
@@ -162,17 +165,20 @@ uvicorn backend.api:app --host 0.0.0.0 --port 8000 --reload
 
 ### 3. Frontend Setup
 
-In a separate terminal, install and run the Streamlit frontend.
+In a separate terminal, install and run the React frontend.
 
 ```bash
-cd frontend
-pip install -r requirements.txt
-
-# Run the Streamlit app
-streamlit run app.py
+cd web
+npm install
+npm run dev
 ```
 
-*Note: The frontend expects the backend to be running at `http://localhost:8000` by default, or configured via `.streamlit/secrets.toml`.*
+The dev server runs at `http://localhost:5173`. It proxies API calls to the
+backend and, by default, targets the deployed Render backend — so it works out
+of the box. To point it at a different backend (e.g. a local one at
+`http://localhost:8000`), set `VITE_BACKEND_URL` in `web/.env` (see
+`web/.env.example`). The Vite dev proxy routes browser requests through the dev
+server, so local development never trips the backend's CORS allow-list.
 
 ---
 
@@ -181,7 +187,7 @@ streamlit run app.py
 This architecture is optimized for free-tier cloud deployment:
 
 - **Backend:** Deploy the FastAPI app using the provided `Dockerfile` to a service like **Render** or Railway. The long-running nature of processing videos utilizes asynchronous background tasks to prevent HTTP timeouts.
-- **Frontend:** Deploy the Streamlit app to **Streamlit Community Cloud** (requires setting the `BACKEND_URL` in Streamlit's secrets).
+- **Frontend:** Deploy the `web/` React app to **Vercel** — import the repo, set **Root Directory** to `web` (framework auto-detects as Vite), and add **`VITE_BACKEND_URL`** = the backend URL. Then add the resulting Vercel origin to the backend's `FRONTEND_ORIGIN` (comma-separated, **no trailing slash**) so CORS admits it.
 - **Database:** **Neon** Serverless Postgres perfectly handles the relational states and vector storage via `pgvector`.
 
 ---
