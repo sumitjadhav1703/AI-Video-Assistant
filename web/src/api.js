@@ -66,3 +66,15 @@ export const askChat = (jobId, question) =>
   });
 
 export const releaseJob = (jobId) => callBackend('DELETE', `/jobs/${jobId}`);
+
+// Fire-and-forget release for tab close / refresh. `keepalive` lets the request
+// outlive the page during unload (where a normal awaited fetch would be killed),
+// so the job's DB row + vectors get dropped instead of orphaned in Neon.
+export function releaseJobOnUnload(jobId) {
+  if (!jobId || !BACKEND_URL) return;
+  try {
+    fetch(`${BACKEND_URL}/jobs/${jobId}`, { method: 'DELETE', keepalive: true });
+  } catch {
+    /* best-effort — nothing we can do as the page goes away */
+  }
+}

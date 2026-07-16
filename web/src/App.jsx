@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Overlays from './components/Overlays';
 import Nav from './components/Nav';
 import Preloader from './components/Preloader';
@@ -6,7 +6,7 @@ import Empty from './components/Empty';
 import Processing from './components/Processing';
 import Results from './components/Results';
 import { SANS, MONO, CREAM, SUBTLE, MUTE, DIM, STEP_ORDER } from './lib/theme';
-import { startJob, getStatus, getResult, askChat, releaseJob, BackendError } from './api';
+import { startJob, getStatus, getResult, askChat, releaseJob, releaseJobOnUnload, BackendError } from './api';
 import { sleep } from './lib/parse';
 
 export default function App() {
@@ -20,6 +20,20 @@ export default function App() {
   // A run token: incremented on each analyse/reset so a stale poll loop from a
   // previous run stops touching state once the user has moved on.
   const runRef = useRef(0);
+
+  // Track the active job id in a ref so the unload handler (registered once) can
+  // read the current value without re-binding. On tab close / refresh we release
+  // the job so its DB row + vectors don't orphan in Neon — the "New session"
+  // button already handles the in-app case.
+  const jobIdRef = useRef(null);
+  useEffect(() => {
+    jobIdRef.current = job?.id ?? null;
+  }, [job]);
+  useEffect(() => {
+    const handler = () => releaseJobOnUnload(jobIdRef.current);
+    window.addEventListener('pagehide', handler);
+    return () => window.removeEventListener('pagehide', handler);
+  }, []);
 
   const poll = useCallback(async (jobId, runId) => {
     while (runRef.current === runId) {
