@@ -1,5 +1,4 @@
 import os
-import shutil
 import tempfile
 import uuid
 from contextlib import asynccontextmanager
@@ -15,6 +14,13 @@ from .core.rag_engine import load_rag_chain, ask_question
 from .core.vector_store import delete_vector_store
 
 load_dotenv()
+
+# Cap uploads so an oversized file gets a clean 413 instead of exhausting the
+# instance. 16kHz mono streaming keeps memory flat, but a multi-hour file still
+# means a long run and many STT calls, so the ceiling stays modest.
+MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "200"))
+MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
+_COPY_CHUNK = 1024 * 1024  # 1MB reads keep the copy itself memory-flat
 
 
 @asynccontextmanager
@@ -81,8 +87,20 @@ async def create_job(
     if is_upload:
         suffix = os.path.splitext(file.filename or "")[1] or ".bin"
         fd, source = tempfile.mkstemp(suffix=suffix)
-        with os.fdopen(fd, "wb") as out:
-            shutil.copyfileobj(file.file, out)
+        # Stream to disk in bounded reads, aborting the moment the running total
+        # crosses the cap — never buffer the whole upload in memory, and never
+        # write an oversized file to disk.
+        total = 0
+        try:
+            with os.fdopen(fd, "wb") as out:
+                while chunk := await file.read(_COPY_CHUNK):
+                    total += len(chunk)
+                    if total > MAX_UPLOAD_BYTES:
+                        raise HTTPException(413, f"File too large (max {MAX_UPLOAD_MB} MB). Trim it or upload audio-only.")
+                    out.write(chunk)
+        except HTTPException:
+            os.remove(source)
+            raise
     else:
         source = youtube_url
 

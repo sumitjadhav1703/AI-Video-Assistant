@@ -4,6 +4,10 @@ import { humanSize } from '../lib/parse';
 
 const ACCEPT = '.mp3,.wav,.m4a,.mp4,.mov,.mkv,.webm,.aac,.ogg,.flac';
 const HERO_WORDS = ['remembered.', 'recorded.', 'summarised.', 'answered.', 'searchable.'];
+// Mirror the backend's MAX_UPLOAD_MB cap so oversized files are caught before the
+// upload even starts (the backend also enforces this with a 413).
+const MAX_UPLOAD_MB = 200;
+const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
 
 // New-session screen: source tabs, file drop / YouTube URL, language, Analyse.
 export default function Empty({ onAnalyse }) {
@@ -13,7 +17,21 @@ export default function Empty({ onAnalyse }) {
   const [lang, setLang] = useState('english');
   const [dragOver, setDragOver] = useState(false);
   const [heroIdx, setHeroIdx] = useState(0);
+  const [sizeError, setSizeError] = useState('');
   const inputRef = useRef(null);
+
+  // Accept a picked/dropped file only if it's within the cap; otherwise surface a
+  // clear message and keep the dropzone empty.
+  const chooseFile = (f) => {
+    if (!f) return;
+    if (f.size > MAX_UPLOAD_BYTES) {
+      setFile(null);
+      setSizeError(`“${f.name}” is ${humanSize(f.size)} — over the ${MAX_UPLOAD_MB} MB limit. Trim it or upload audio-only.`);
+      return;
+    }
+    setSizeError('');
+    setFile(f);
+  };
 
   useEffect(() => {
     const iv = setInterval(() => setHeroIdx((i) => i + 1), 2600);
@@ -70,7 +88,7 @@ export default function Empty({ onAnalyse }) {
               type="file"
               accept={ACCEPT}
               style={{ display: 'none' }}
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
+              onChange={(e) => chooseFile(e.target.files?.[0] || null)}
             />
             {!file ? (
               <div
@@ -84,8 +102,7 @@ export default function Empty({ onAnalyse }) {
                 onDrop={(e) => {
                   e.preventDefault();
                   setDragOver(false);
-                  const f = e.dataTransfer.files?.[0];
-                  if (f) setFile(f);
+                  chooseFile(e.dataTransfer.files?.[0]);
                 }}
                 style={{
                   border: `2px dashed rgba(232,229,222,${dragOver ? 0.85 : 0.45})`,
@@ -160,6 +177,21 @@ export default function Empty({ onAnalyse }) {
                   Remove ×
                 </button>
               </div>
+            )}
+            {sizeError && (
+              <p
+                style={{
+                  margin: '14px 2px 0',
+                  fontFamily: MONO,
+                  fontSize: 11,
+                  lineHeight: 1.7,
+                  letterSpacing: '0.03em',
+                  color: '#d98c7a',
+                  maxWidth: 720,
+                }}
+              >
+                ⚠ {sizeError}
+              </p>
             )}
           </>
         )}

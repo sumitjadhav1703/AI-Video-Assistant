@@ -1,13 +1,21 @@
-import yt_dlp
-from pydub import AudioSegment
+import glob
 import os
+import shutil
+import subprocess
+import tempfile
+
+import yt_dlp
 
 DOWNLOAD_DIR = 'downloades'
-os.makedirs(DOWNLOAD_DIR,exist_ok = True)
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 # Groq rejects uploads over 25MB. At 16kHz mono 16-bit (32 KB/s), a 5-minute
 # chunk is ~9.6MB, which leaves comfortable headroom.
 CHUNK_MINUTES = 5
+
+# The ffmpeg binary. It ships in the Docker image (see Dockerfile) and pydub/yt-dlp
+# already rely on it; resolve from PATH with a plain-name fallback.
+FFMPEG = shutil.which("ffmpeg") or "ffmpeg"
 
 
 def _cookie_opts() -> dict:
@@ -65,35 +73,49 @@ def download_youtube_audio(url :str) ->str:
     return filename
 
 
+def chunk_streaming(raw_path: str, chunk_minutes: int = CHUNK_MINUTES) -> tuple[list, str]:
+    """
+    Decode any audio/video file to 16kHz mono WAV and split it into fixed-length
+    chunks in a single streaming ffmpeg pass. Returns (chunk_paths, chunk_dir).
 
-def convert_to_wav(input_path: str) -> str:
-    """Convert any audio/video file to 16kHz mono WAV format using pydub."""
-    output_path = os.path.splitext(input_path)[0] + "_converted.wav"
-    audio = AudioSegment.from_file(input_path)
-    audio = audio.set_channels(1).set_frame_rate(16000) #16khz
-    audio.export(output_path, format="wav")
-    return output_path
+    ffmpeg processes the input as a stream, so memory stays flat regardless of file
+    length. This deliberately replaces the old pydub path (AudioSegment.from_file +
+    from_wav), which loaded the entire decoded PCM into RAM twice and blew past
+    Render's 512MB free tier on long recordings.
+    """
+    chunk_dir = tempfile.mkdtemp(prefix="avassist_chunks_")
+    pattern = os.path.join(chunk_dir, "chunk_%03d.wav")
 
+    cmd = [
+        FFMPEG, "-y",
+        "-i", raw_path,
+        "-vn",                       # drop any video stream — only the audio track matters
+        "-ac", "1",                  # mono
+        "-ar", "16000",              # 16kHz — all Whisper/Sarvam consume
+        "-f", "segment",
+        "-segment_time", str(chunk_minutes * 60),
+        "-reset_timestamps", "1",
+        pattern,
+    ]
 
+    try:
+        subprocess.run(cmd, check=True, capture_output=True)
+    except subprocess.CalledProcessError as err:
+        shutil.rmtree(chunk_dir, ignore_errors=True)
+        stderr = (err.stderr or b"").decode("utf-8", "replace").strip()
+        tail = stderr.splitlines()[-1] if stderr else "unknown ffmpeg error"
+        raise RuntimeError(f"Audio conversion failed: {tail}") from err
 
-def chunk_audio(wav_path : str , chunk_minutes : int = CHUNK_MINUTES) -> list:
-    audio = AudioSegment.from_wav(wav_path)
-    chunk_ms = chunk_minutes * 60 * 1000
+    chunks = sorted(glob.glob(os.path.join(chunk_dir, "chunk_*.wav")))
+    if not chunks:
+        shutil.rmtree(chunk_dir, ignore_errors=True)
+        raise RuntimeError("No audio was found in the uploaded file.")
+    return chunks, chunk_dir
 
-    chunks = []
-
-    for i, start in enumerate(range(0,len(audio),chunk_ms)):
-        chunk = audio[start : start + chunk_ms]
-        chunk_path = f"{wav_path}_chunk_{i}.wav"
-        chunk.export(chunk_path , format = "wav")
-
-        chunks.append(chunk_path)
-
-    return chunks
 
 def process_input(source: str) -> tuple[list, list]:
     """
-    Returns (chunks, artifacts). `artifacts` is every temp file this created,
+    Returns (chunks, artifacts). `artifacts` is every temp file/dir this created,
     for the caller to delete once transcription is done — audio is transient and
     is never persisted anywhere.
     """
@@ -107,26 +129,24 @@ def process_input(source: str) -> tuple[list, list]:
         print("Detected local file.")
         raw_path = source
 
-    # Both paths normalize through the same conversion. yt-dlp hands back whatever
-    # sample rate the source used (often 44.1kHz stereo), which at 10 minutes is
-    # ~105MB per chunk — far over Groq's 25MB cap. 16kHz mono is also all Whisper
-    # consumes, so nothing is lost by downsampling here.
-    print("Converting to 16kHz mono WAV...")
-    wav_path = convert_to_wav(raw_path)
-    artifacts.append(wav_path)
-
-    print("Chunking audio...")
-    chunks = chunk_audio(wav_path)
+    # Single streaming pass: decode to 16kHz mono and segment into chunks at once.
+    print("Converting to 16kHz mono WAV and chunking...")
+    chunks, chunk_dir = chunk_streaming(raw_path)
     artifacts.extend(chunks)
+    artifacts.append(chunk_dir)
     print(f"Audio ready — {len(chunks)} chunk(s) created.")
     return chunks, artifacts
 
 
 def cleanup(artifacts: list) -> None:
-    """Delete transient audio. Best-effort: a missing file is not an error."""
+    """Delete transient audio. Best-effort: a missing path is not an error."""
     for path in artifacts:
         try:
-            if path and os.path.exists(path):
+            if not path or not os.path.exists(path):
+                continue
+            if os.path.isdir(path):
+                shutil.rmtree(path, ignore_errors=True)
+            else:
                 os.remove(path)
         except OSError as e:
             print(f"Could not remove {path}: {e}")
