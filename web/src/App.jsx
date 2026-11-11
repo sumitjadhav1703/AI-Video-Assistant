@@ -289,7 +289,7 @@ export default function App() {
         )}
         {(view === 'home' || view === 'sample' || view === 'live') && session && (
           <div className="demo-panel demo-resume">
-            <button className="demo-button" onClick={() => { setPhase('processing'); openView('session'); }}>Resume live session</button>
+            <button className="demo-button" onClick={() => openView('session')}>Resume live session</button>
           </div>
         )}
         {view === 'sample' && <DemoSample onBack={() => openView('home')} />}

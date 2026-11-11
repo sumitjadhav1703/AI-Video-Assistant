@@ -9,7 +9,7 @@ from .core.llm_gateway import operation_scope
 from .core.summarizer import summarize, generate_title, preflight_processing
 from .core.extractor import extract_findings
 from .core.rag_engine import build_rag_chain
-from .core.vector_store import delete_vector_store
+from .db import delete_vector_store
 from . import db
 from .usage_limits import require_provider_calls, LimitExceeded
 from .core.provider_budget import JobBudgetExceeded

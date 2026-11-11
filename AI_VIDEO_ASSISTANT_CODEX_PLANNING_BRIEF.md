@@ -7,9 +7,7 @@ See the [current roadmap status](docs/ROADMAP_STATUS.md) for the reconciliation 
 > **Important:** This is a **planning-only brief**. Do not implement the features, modify application code, install packages, run migrations, change infrastructure, push commits, or deploy anything during this task. First inspect the repository and return a complete proposed plan for review.
 
 **Repository:** https://github.com/sumitjadhav1703/AI-Video-Assistant
-
 **Primary branch observed:** `main`
-
 **Planning brief date:** 2026-11-05
 
 ---

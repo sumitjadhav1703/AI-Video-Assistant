@@ -15,7 +15,7 @@ export class BackendError extends Error {
   }
 }
 
-async function callBackend(method, path, { body, headers, signal } = {}) {
+async function callBackend(method, path, { body, headers, signal, valid } = {}) {
   if (!BACKEND_URL) throw new BackendError('Backend URL is not configured.');
 
   const controller = new AbortController();
@@ -26,13 +26,16 @@ async function callBackend(method, path, { body, headers, signal } = {}) {
 
   try {
     const response = await fetch(`${BACKEND_URL}${path}`, {
-      method, body, headers, signal: controller.signal, cache: 'no-store',
+      method, body, headers, signal: controller.signal, cache: 'no-store', redirect: 'error',
     });
     const payload = await response.json().catch((error) => {
       if (controller.signal.aborted) throw error;
       return null;
     });
-    if (response.ok && payload) return payload;
+    if (response.ok) {
+      if (payload && (!valid || valid(payload))) return payload;
+      throw new BackendError('The backend returned an invalid response.', 502);
+    }
 
     const retryAfter = response.status === 429 ? response.headers.get('Retry-After') : null;
     let retryAfterMs = 0;
@@ -72,13 +75,21 @@ const jobAuth = ({ token }) => ({ Authorization: `Bearer ${token}` });
 
 export const getStatus = (job, signal) =>
   callBackend('GET', jobPath(job), { headers: jobAuth(job), signal });
+const RESULT_FIELDS = ['title', 'summary', 'transcript', 'action_items', 'key_decisions', 'open_questions'];
+
 export const getResult = (job, signal) =>
-  callBackend('GET', `${jobPath(job)}/result`, { headers: jobAuth(job), signal });
+  callBackend('GET', `${jobPath(job)}/result`, {
+    headers: jobAuth(job), signal,
+    valid: (result) => RESULT_FIELDS.every((field) => typeof result[field] === 'string'),
+  });
 
 export const askChat = (job, question) =>
   callBackend('POST', `${jobPath(job)}/chat`, {
     body: JSON.stringify({ question, tier: 'economy' }),
     headers: { ...jobAuth(job), 'Content-Type': 'application/json' },
+    valid: ({ answer, citations, model }) => typeof answer === 'string' && Array.isArray(citations)
+      && citations.every((citation) => typeof citation?.chunk_id === 'string' && typeof citation?.text === 'string')
+      && (model?.tier == null || typeof model.tier === 'string'),
   });
 
 export const releaseJob = (job) => callBackend('DELETE', jobPath(job), { headers: jobAuth(job) });

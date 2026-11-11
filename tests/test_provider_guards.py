@@ -51,17 +51,17 @@ class ProviderGuardsTests(unittest.TestCase):
                 patch.object(vector_store, 'get_embeddings') as embeddings:
             cursor = connect.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value
             cursor.fetchone.return_value = {'table_name': 'langchain_pg_collection'}
-            vector_store.delete_vector_store('abc')
+            vector_store.db.delete_vector_store('abc')
             embeddings.assert_not_called()
             deletes = [call.args for call in cursor.execute.call_args_list if call.args[0].startswith('DELETE')]
-            self.assertEqual(deletes, [('DELETE FROM langchain_pg_collection WHERE name = %s', ('job_abc',)),
+            self.assertEqual(deletes, [('DELETE FROM langchain_pg_collection WHERE name=%s', ('job_abc',)),
                                        ('DELETE FROM transcript_chunks WHERE job_id=%s', ('abc',))])
 
     def test_delete_collection_is_noop_when_table_absent(self):
         with patch('backend.db.connect') as connect:
             cursor = connect.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value
             cursor.fetchone.return_value = {'table_name': None}
-            vector_store.delete_vector_store('abc')
+            vector_store.db.delete_vector_store('abc')
             self.assertEqual(cursor.execute.call_count, 2)
             self.assertFalse(any(call.args[0].startswith('DELETE') for call in cursor.execute.call_args_list))
 

@@ -9,28 +9,64 @@ from pathlib import Path
 import re
 import resource
 import socket
+import stat
 import sys
+import tempfile
 import threading
 import time
 from unittest.mock import patch
 
 MIB = 1024 * 1024
+CGROUP_ROOT = Path('/sys/fs/cgroup')
 QUESTION = 'When is the demo?'
 QUOTE = 'The demo is on Friday.'
 TRANSCRIPT = ' '.join([QUOTE + ' The team reviewed the plan and agreed to prepare slides.'] * 25)
 
 
 def container_limits():
-    cgroup = Path('/sys/fs/cgroup')
-    if not sys.platform.startswith('linux') or not (cgroup / 'memory.max').exists():
+    if not sys.platform.startswith('linux'):
         return None
-    memory = (cgroup / 'memory.max').read_text().strip()
-    cpu, period = (cgroup / 'cpu.max').read_text().split()
+    try:
+        memory = (CGROUP_ROOT / 'memory.max').read_text().strip()
+        swap = (CGROUP_ROOT / 'memory.swap.max').read_text().strip()
+        cpu, period = (CGROUP_ROOT / 'cpu.max').read_text().split()
+    except FileNotFoundError:
+        return None
     return {'memory_limit_bytes': None if memory == 'max' else int(memory),
+            'swap_limit_bytes': None if swap == 'max' else int(swap),
             'cpus': None if cpu == 'max' else int(cpu) / int(period)}
 
 
+def container_usage():
+    if not sys.platform.startswith('linux'):
+        return None
+    try:
+        peak = int((CGROUP_ROOT / 'memory.peak').read_text())
+        events = (CGROUP_ROOT / 'memory.events').read_text()
+        cpu = (CGROUP_ROOT / 'cpu.stat').read_text()
+    except FileNotFoundError:
+        return None
+    return {'peak_bytes': peak,
+            'events': {key: int(value) for key, value in map(str.split, events.splitlines())},
+            'cpu_usage_usec': int(dict(map(str.split, cpu.splitlines()))['usage_usec'])}
+
+
+def temporary_file_bytes(directory):
+    total = 0
+    for path in directory.rglob('*'):
+        try:
+            metadata = path.stat()
+        except FileNotFoundError:
+            continue
+        if stat.S_ISREG(metadata.st_mode):
+            total += metadata.st_size
+    return total
+
+
 def run(dsn, clip, vector_sql, vector_library):
+    cgroup_start = container_usage()
+    cpu_start = time.process_time()
+    child_start = resource.getrusage(resource.RUSAGE_CHILDREN)
     import httpx
     import psycopg
 
@@ -109,12 +145,17 @@ def run(dsn, clip, vector_sql, vector_library):
         })
 
     stage_metrics = []
+    temp_peak = 0
 
     class StageHandler(logging.Handler):
         def emit(self, record):
-            match = re.fullmatch(r'metric=stage stage=([a-z_]+) status=(success|failed) elapsed_ms=(\d+)', record.getMessage())
+            nonlocal temp_peak
+            message = record.getMessage()
+            match = re.fullmatch(r'metric=stage stage=([a-z_]+) status=(success|failed) elapsed_ms=(\d+)', message)
             if match:
                 stage_metrics.append({'stage': match[1], 'status': match[2], 'ms': int(match[3])})
+            if match or message.startswith(('metric=upload_copy ', 'metric=decoded_audio ')):
+                temp_peak = max(temp_peak, temporary_file_bytes(scratch))
 
     metric_logger = logging.getLogger('uvicorn.error.metrics')
     handler = StageHandler()
@@ -123,6 +164,8 @@ def run(dsn, clip, vector_sql, vector_library):
     metric_logger.setLevel(logging.INFO)
     try:
         with ExitStack() as stack:
+            scratch = Path(stack.enter_context(tempfile.TemporaryDirectory(prefix='ava-benchmark-media-')))
+            stack.enter_context(patch.object(tempfile, 'tempdir', str(scratch)))
             stack.enter_context(patch.dict(os.environ, env, clear=True))
             stack.enter_context(patch('dotenv.load_dotenv', return_value=False))
             stack.enter_context(patch.object(httpx.HTTPTransport, 'handle_request', fake_http))
@@ -140,8 +183,10 @@ def run(dsn, clip, vector_sql, vector_library):
                 stack.enter_context(patch.object(PGVector, 'create_vector_extension'))
             primary = stack.enter_context(TestClient(api.app, client=('127.0.0.1', 31000)))
             startup = time.perf_counter() - started
-            other = TestClient(api.app, client=('127.0.0.2', 31000))
-            stack.callback(other.close)
+            second_client = TestClient(api.app, client=('127.0.0.2', 31000))
+            third_client = TestClient(api.app, client=('127.0.0.3', 31000))
+            stack.callback(second_client.close)
+            stack.callback(third_client.close)
 
             def submit(client):
                 t = time.perf_counter()
@@ -156,18 +201,29 @@ def run(dsn, clip, vector_sql, vector_library):
                 assert result.json()['title'] == 'Friday Demo'
                 return body['job_id'], headers, time.perf_counter() - t
 
-            job_id, headers, first = submit(primary)
-            overlap.set()
-            with ThreadPoolExecutor(max_workers=2) as workers:
-                second = workers.submit(submit, other)
+            def ask(client, job_id, headers):
                 t = time.perf_counter()
-                answer = primary.post(f'/jobs/{job_id}/chat', headers=headers, json={'question': QUESTION})
-                chat = time.perf_counter() - t
+                answer = client.post(f'/jobs/{job_id}/chat', headers=headers, json={'question': QUESTION})
                 answer.raise_for_status()
                 assert not answer.json()['abstained'] and answer.json()['citations'][0]['text'] == QUOTE
+                return time.perf_counter() - t
+
+            job_id, headers, first = submit(primary)
+            cold_chat = ask(primary, job_id, headers)
+            overlap.set()
+            with ThreadPoolExecutor(max_workers=2) as workers:
+                second = workers.submit(submit, second_client)
+                chat = ask(primary, job_id, headers)
                 second_job, second_headers, concurrent = second.result()
-            for client, identifier, capability in ((primary, job_id, headers), (other, second_job, second_headers)):
+            overlap.clear()
+            third_job, third_headers, warm = submit(third_client)
+            warm_chat = ask(third_client, third_job, third_headers)
+            for client, identifier, capability in ((primary, job_id, headers),
+                                                    (second_client, second_job, second_headers),
+                                                    (third_client, third_job, third_headers)):
                 client.delete(f'/jobs/{identifier}', headers=capability).raise_for_status()
+            remaining_bytes = temporary_file_bytes(scratch)
+            assert remaining_bytes == 0, 'Temporary media was left after processing'
             with db.connect() as connection:
                 audio_ms = connection.execute('SELECT SUM(duration_ms) AS total FROM audio_attempts').fetchone()['total']
                 usage = connection.execute('SELECT COUNT(*) AS attempts, SUM(input_tokens) AS reserved_input, '
@@ -177,16 +233,26 @@ def run(dsn, clip, vector_sql, vector_library):
         metric_logger.removeHandler(handler)
         metric_logger.setLevel(previous_level)
 
-    peak_path = Path('/sys/fs/cgroup/memory.peak')
+    cgroup_end = container_usage()
+    child_end = resource.getrusage(resource.RUSAGE_CHILDREN)
     return {
         'scope': 'Synthetic video, real FFmpeg/PostgreSQL/pgvector/FlashRank, intercepted provider HTTP',
         'system': sys.platform, 'clip_bytes': clip.stat().st_size,
-        'app_import_and_startup_seconds': startup, 'jobs_completed': 2,
-        'first_job_seconds': first, 'overlapping_job_seconds': concurrent, 'overlapping_chat_seconds': chat,
+        'app_import_and_startup_seconds': startup, 'jobs_completed': 3,
+        'first_job_seconds': first, 'first_chat_seconds': cold_chat,
+        'overlapping_job_seconds': concurrent, 'overlapping_chat_seconds': chat,
+        'warm_job_seconds': warm, 'warm_chat_seconds': warm_chat,
         'stage_metrics': stage_metrics, 'mocked_requests': counts, 'reserved_audio_ms': int(audio_ms),
         'text_ledger': usage,
         'python_peak_rss_bytes': resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * (1 if sys.platform == 'darwin' else 1024),
-        'cgroup_peak_bytes': int(peak_path.read_text()) if peak_path.exists() else None,
+        'python_cpu_seconds': time.process_time() - cpu_start,
+        'child_cpu_seconds': (child_end.ru_utime - child_start.ru_utime) + (child_end.ru_stime - child_start.ru_stime),
+        'sampled_peak_temp_file_bytes': temp_peak, 'remaining_temp_file_bytes': remaining_bytes,
+        'cgroup_peak_bytes': cgroup_end['peak_bytes'] if cgroup_end else None,
+        'cgroup_memory_events': {key: value - cgroup_start['events'].get(key, 0)
+                                 for key, value in cgroup_end['events'].items()} if cgroup_start and cgroup_end else None,
+        'cgroup_cpu_seconds': ((cgroup_end['cpu_usage_usec'] - cgroup_start['cpu_usage_usec']) / 1_000_000
+                               if cgroup_start and cgroup_end else None),
         'container_limits': container_limits(),
     }
 
@@ -197,16 +263,20 @@ def main():
     parser.add_argument('--linux-gate', action='store_true')
     args = parser.parse_args()
     limits = container_limits()
-    if args.linux_gate and limits != {'memory_limit_bytes': 512 * MIB, 'cpus': 0.1}:
-        parser.error('Linux gate requires a cgroup v2 container with 512 MiB and 0.1 CPU')
+    if args.linux_gate and limits != {'memory_limit_bytes': 512 * MIB, 'swap_limit_bytes': 0, 'cpus': 0.1}:
+        parser.error('Linux gate requires a cgroup v2 container with 512 MiB, zero swap, and 0.1 CPU')
     sql, library = os.getenv('PGVECTOR_TEST_SQL_PATH'), os.getenv('TESTPGVECTORLIB')
     if bool(sql) != bool(library):
         parser.error('Supply both local pgvector fixture paths or neither')
     report = run(os.getenv('TEST_DATABASE_URL', ''), args.clip, Path(sql) if sql else None,
                  Path(library) if library else None)
     print(json.dumps(report, indent=2))
-    if args.linux_gate and (report['cgroup_peak_bytes'] is None or report['cgroup_peak_bytes'] >= 450 * MIB):
-        raise SystemExit('Workload exceeded the release memory threshold')
+    if args.linux_gate:
+        if report['cgroup_peak_bytes'] is None or report['cgroup_memory_events'] is None:
+            raise SystemExit('Required cgroup v2 measurements are unavailable')
+        if report['cgroup_peak_bytes'] >= 450 * MIB or any(
+                report['cgroup_memory_events'][event] for event in ('oom', 'oom_kill')):
+            raise SystemExit('Workload exceeded the release memory threshold or triggered an OOM event')
 
 
 if __name__ == '__main__':

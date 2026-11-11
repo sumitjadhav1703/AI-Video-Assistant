@@ -1,9 +1,7 @@
 // Shared design tokens ported from the Minutes design.
 export const SANS = "'Helvetica Neue',Helvetica,Arial,sans-serif";
 export const MONO = "'Space Grotesk',sans-serif";
-export const CODE = "'IBM Plex Mono',monospace";
 
-export const INK = '#0e0e0d';       // background
 export const CREAM = '#e8e5de';     // primary text
 export const SUBTLE = '#a19e96';    // body copy
 export const MUTE = '#6f6c65';      // labels

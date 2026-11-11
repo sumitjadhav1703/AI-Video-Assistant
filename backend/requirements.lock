@@ -16,7 +16,7 @@ cryptography==50.0.2
 distro==1.9.0
 fastapi==0.162.0
 fastuuid==0.14.0
-filelock==3.32.7
+filelock==4.2.1
 flashrank==0.2.10
 flatbuffers==25.12.19
 frozenlist==1.8.0
@@ -57,7 +57,7 @@ langgraph-checkpoint==4.3.1
 langgraph-prebuilt==1.1.1
 langgraph-sdk==0.4.13
 langsmith==0.14.17
-litellm==1.108.0
+litellm==1.108.5
 markupsafe==3.0.4
 mcp==2.3.0
 mcp-types==2.3.0

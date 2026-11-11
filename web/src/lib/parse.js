@@ -14,17 +14,7 @@ export function stripMd(str) {
 
 const BULLET = /^\s*(?:[-•*]\s+|\d+[.)]\s+)/;
 
-// Findings strings -> clean items, one per non-empty line, markdown stripped.
-export function toItems(str) {
-  if (!str) return [];
-  return str
-    .split('\n')
-    .map((line) => stripMd(line.replace(BULLET, '')))
-    .filter(Boolean);
-}
-
-// Summary -> one clean line per non-empty line (handles both prose paragraphs
-// and inline bullet lists), markdown stripped.
+// Summary and findings -> clean, non-empty lines with markdown markers removed.
 export function toLines(str) {
   if (!str) return [];
   return str
@@ -52,8 +42,4 @@ export function humanSize(bytes) {
     i += 1;
   }
   return `${n.toFixed(i > 0 && n < 10 ? 1 : 0)} ${units[i]}`;
-}
-
-export function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

@@ -1,4 +1,6 @@
 import os
+
+import httpx
 import requests
 from groq import Groq
 from pydub import AudioSegment
@@ -34,8 +36,11 @@ def _send_to_sarvam(piece_path: str) -> str:
             SARVAM_STT_TRANSLATE_URL,
             headers={'api-subscription-key': os.environ[profile.keyenv]},
             files={'file': (os.path.basename(piece_path), f, 'audio/wav')},
-            data={'model': profile.model, 'with_diarization': 'false'}, timeout=120,
+            data={'model': profile.model, 'with_diarization': 'false'},
+            timeout=120, allow_redirects=False,
         )
+    if response.status_code in range(300, 400):
+        raise RuntimeError('Unexpected transcription provider redirect')
     if not response.ok:
         response.raise_for_status()
     return response.json().get('transcript', '')
@@ -75,12 +80,15 @@ def _wav_duration_ms(path):
 
 def _groq_segments(path):
     profile = audio_budget.profile_for_language('english')
+    if os.getenv('GROQ_CUSTOM_HEADERS'):
+        raise ValueError('Unset GROQ_CUSTOM_HEADERS before transcription')
     duration = _wav_duration_ms(path)
     audio_budget.reserve_audio_attempt(current_operation(), profile, duration)
-    client = Groq(api_key=os.environ[profile.keyenv], timeout=60, max_retries=0)
-    with open(path, 'rb') as f:
+    with httpx.Client(follow_redirects=False, trust_env=False) as transport, open(path, 'rb') as f:
+        client = Groq(api_key=os.environ[profile.keyenv], base_url='https://api.groq.com',
+                      timeout=60, max_retries=0, http_client=transport)
         result = client.audio.transcriptions.create(
-            file=(os.path.basename(path), f.read()), model=profile.model,
+            file=(os.path.basename(path), f), model=profile.model,
             response_format='verbose_json', timestamp_granularities=['segment'],
         )
     return result.segments if hasattr(result, 'segments') else result.get('segments', [])

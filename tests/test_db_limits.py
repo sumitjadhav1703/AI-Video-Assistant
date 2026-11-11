@@ -5,6 +5,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 from dataclasses import replace
+from threading import Barrier
 from unittest.mock import patch
 from urllib.parse import urlparse
 
@@ -12,7 +13,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from backend import db
-from backend.usage_limits import Settings, LimitExceeded, JobBusy
+from backend.usage_limits import Settings, LimitExceeded, JobBusy, JobUnavailable
 
 
 @unittest.skipUnless(os.getenv('TEST_DATABASE_URL'), 'set TEST_DATABASE_URL to an isolated local PostgreSQL')
@@ -66,20 +67,23 @@ class DatabaseLimitTests(unittest.TestCase):
         for _ in range(self.settings.jobs_per_ip_day):
             job_id, token = self.admit()
             db.release_slot('processing', token)
-            with db.connect() as conn:
-                conn.execute('DELETE FROM jobs WHERE id=%s', (job_id,))
+            db.fail_job(job_id, 'synthetic failure')
+            db.delete_job(job_id)
         with self.assertRaises(LimitExceeded):
             self.admit()
 
     def test_cleanup_uses_terminal_update_time(self):
-        for job_id in ('old', 'recent', 'active', 'unknown'):
+        for job_id in ('old', 'recent', 'active', 'unknown', 'legacy-deleting'):
             db.create_job(job_id, 'english')
         with db.connect() as conn:
             conn.execute("UPDATE jobs SET status='done', updated_at=NOW()-INTERVAL '25 hours' WHERE id='old'")
             conn.execute("UPDATE jobs SET status='done', created_at=NOW()-INTERVAL '2 days' WHERE id='recent'")
             conn.execute("UPDATE jobs SET status='running', updated_at=NOW()-INTERVAL '2 days' WHERE id='active'")
             conn.execute("UPDATE jobs SET status='unknown', updated_at=NOW()-INTERVAL '2 days' WHERE id='unknown'")
-        self.assertEqual(db.job_ids_older_than(1), ['old'])
+            conn.execute("UPDATE jobs SET status='deleting', updated_at=NOW()-INTERVAL '2 days' WHERE id='legacy-deleting'")
+        self.assertCountEqual(db.job_ids_older_than(1), ['old', 'legacy-deleting'])
+        db.delete_job('legacy-deleting')
+        self.assertIsNone(db.get_job_status('legacy-deleting'))
 
     def test_global_limit_applies_across_ips(self):
         settings = replace(self.settings, jobs_global_day=2)
@@ -116,15 +120,47 @@ class DatabaseLimitTests(unittest.TestCase):
         for i in range(2):
             chat_token = db.reserve_chat(job_id, f'ip{i}', settings)
             with self.assertRaises(JobBusy):
-                db.begin_delete(job_id)
+                db.delete_job(job_id)
             db.release_slot('chat', chat_token)
         with self.assertRaises(LimitExceeded):
             db.reserve_chat(job_id, 'other-ip', settings)
 
+    def test_chat_and_delete_cannot_both_win(self):
+        job_id = uuid.uuid4().hex
+        db.create_job(job_id, 'english')
+        with db.connect() as conn:
+            conn.execute("UPDATE jobs SET status='done' WHERE id=%s", (job_id,))
+        start = Barrier(2, timeout=5)
+
+        def chat():
+            start.wait()
+            try:
+                return db.reserve_chat(job_id, 'ip', self.settings)
+            except JobUnavailable:
+                return None
+
+        def delete():
+            start.wait()
+            try:
+                db.delete_job(job_id)
+                return True
+            except JobBusy:
+                return False
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            chat_result = pool.submit(chat)
+            delete_result = pool.submit(delete)
+            chat_token = chat_result.result(timeout=10)
+            deleted = delete_result.result(timeout=10)
+        self.assertNotEqual(bool(chat_token), deleted)
+        self.assertEqual(db.get_job_status(job_id) is None, deleted)
+        if chat_token:
+            db.release_slot('chat', chat_token)
+
     def test_active_job_cannot_be_deleted_or_cleanup_selected(self):
         job_id, _ = self.admit()
         with self.assertRaises(JobBusy):
-            db.begin_delete(job_id)
+            db.delete_job(job_id)
         self.assertEqual(db.job_ids_older_than(0), [])
 
     def test_old_buckets_pruned_without_resetting_current_usage(self):
@@ -157,6 +193,52 @@ class DatabaseLimitTests(unittest.TestCase):
             buckets = conn.execute("SELECT bucket AT TIME ZONE 'UTC' AS bucket FROM usage_counters").fetchall()
         self.assertTrue(all(row['bucket'].hour == 0 and row['bucket'].minute == 0 for row in buckets))
 
+
+    def test_failed_api_delete_rolls_back_artifacts_and_can_be_retried(self):
+        from fastapi.testclient import TestClient
+        from backend import api
+
+        target = 'a' * 32
+        other = 'b' * 32
+        slot = db.admit_job(target, 'english', 'ip', self.settings)
+        db.release_slot('processing', slot)
+        db.create_job(other, 'english')
+        with db.connect() as conn:
+            conn.execute("UPDATE jobs SET status='done'")
+            conn.execute('CREATE TABLE langchain_pg_collection (uuid text PRIMARY KEY, name text UNIQUE)')
+            conn.execute('''CREATE TABLE langchain_pg_embedding (
+                id text PRIMARY KEY, collection_id text REFERENCES langchain_pg_collection(uuid) ON DELETE CASCADE)''')
+            for job_id in (target, other):
+                conn.execute('INSERT INTO langchain_pg_collection VALUES (%s,%s)', (job_id, f'job_{job_id}'))
+                conn.execute('INSERT INTO langchain_pg_embedding VALUES (%s,%s)', (job_id, job_id))
+                conn.execute("INSERT INTO transcript_chunks VALUES (%s,%s,0,'synthetic',NULL,NULL,'unknown')",
+                             (job_id, job_id))
+            conn.execute('CREATE TABLE audit_delete_guard (job_id text REFERENCES jobs(id))')
+            conn.execute('INSERT INTO audit_delete_guard VALUES (%s)', (target,))
+            counters = conn.execute('SELECT * FROM usage_counters ORDER BY scope').fetchall()
+
+        def artifacts():
+            with db.connect() as conn:
+                return [conn.execute(query).fetchall() for query in (
+                    'SELECT id FROM jobs ORDER BY id',
+                    'SELECT job_id AS id FROM transcript_chunks ORDER BY job_id',
+                    'SELECT id FROM langchain_pg_embedding ORDER BY id',
+                )]
+
+        with patch.dict(os.environ, {'JOB_TOKEN_SECRET': 'j' * 32}):
+            client = TestClient(api.app)
+            headers = {'Authorization': 'Bearer ' + api._job_token(target)}
+            self.assertEqual(client.delete(f'/jobs/{target}', headers=headers).status_code, 503)
+            self.assertEqual(db.get_job_status(target)['status'], 'done')
+            self.assertEqual(artifacts(), [[{'id': target}, {'id': other}]] * 3)
+            with db.connect() as conn:
+                conn.execute('DROP TABLE audit_delete_guard')
+            self.assertEqual(client.delete(f'/jobs/{target}', headers=headers).status_code, 200)
+
+        self.assertEqual(artifacts(), [[{'id': other}]] * 3)
+        with db.connect() as conn:
+            self.assertEqual(conn.execute('SELECT * FROM usage_counters ORDER BY scope').fetchall(), counters)
+            conn.execute('DROP TABLE langchain_pg_embedding, langchain_pg_collection')
 
     def test_positive_api_upload_result_chat_delete_preserves_usage(self):
         from fastapi.testclient import TestClient

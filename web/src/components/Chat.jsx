@@ -37,7 +37,7 @@ export default function Chat({ chat, onAsk, source, economyOnly, presetQuestions
   };
 
   return (
-    <section style={{ padding: presetQuestions ? '14px var(--result-section-gutter) 34px' : '14px 44px 100px' }}>
+    <section style={{ padding: presetQuestions ? '14px var(--result-section-gutter) 34px' : '14px var(--result-section-gutter) 100px' }}>
       <div
         style={{
           animation: 'fadeUp .9s cubic-bezier(.22,1,.36,1) .35s both',
@@ -162,9 +162,8 @@ export default function Chat({ chat, onAsk, source, economyOnly, presetQuestions
                 <option value="economy">Economy</option><option value="strong">Strong</option>
               </select>
             </label>}
-            <div style={{ display: 'flex', gap: 14, borderTop: '1px solid rgba(232,229,222,0.10)', paddingTop: 28 }}>
+            <div className="chat-compose" style={{ borderTop: '1px solid rgba(232,229,222,0.10)', paddingTop: 28 }}>
               <input
-                data-hov="1"
                 value={draft}
                 maxLength={1000}
                 disabled={sending}
@@ -176,6 +175,7 @@ export default function Chat({ chat, onAsk, source, economyOnly, presetQuestions
                 placeholder="What were the main decisions made?"
                 style={{
                   flex: 1,
+                  minWidth: 0,
                   background: 'none',
                   border: '1px solid rgba(232,229,222,0.18)',
                   color: CREAM,
@@ -188,8 +188,6 @@ export default function Chat({ chat, onAsk, source, economyOnly, presetQuestions
                 }}
               />
               <button
-                data-hov="1"
-                data-mag="1"
                 onClick={send}
                 disabled={sending || !draft.trim()}
                 style={{
@@ -199,7 +197,7 @@ export default function Chat({ chat, onAsk, source, economyOnly, presetQuestions
                   fontFamily: MONO,
                   fontSize: 11,
                   letterSpacing: '0.06em',
-                  padding: '0 32px',
+                  padding: '0 var(--chat-button-padding, 32px)',
                   borderRadius: 14,
                   boxShadow: '5px 5px 0 rgba(232,229,222,0.25)',
                   transition: 'transform .3s cubic-bezier(.22,1,.36,1), background .2s, box-shadow .2s',

@@ -2,8 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
+import { isCallToolResult, isJSONRPCResultResponse, WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/server';
 import { Client } from 'pg';
 import { createReader } from '../src/db.ts';
+import { createServer } from '../src/tools.ts';
 
 const url = process.env.TEST_DATABASE_URL;
 
@@ -58,6 +60,35 @@ test('isolated view permissions and reader behavior', { skip: !url }, async () =
     assert.deepEqual((await reader.transcript('00000000-0000-0000-0000-000000000002', 5, -1))?.chunks, []);
     assert.equal(await reader.status('00000000-0000-0000-0000-000000000003'), null);
     assert.equal((await reader.status('00000000-0000-0000-0000-000000000004'))?.content_available, false);
+
+    async function callTool(name: string, args: object) {
+      const server = createServer(reader);
+      const transport = new WebStandardStreamableHTTPServerTransport({ enableJsonResponse: true });
+      await server.connect(transport);
+      try {
+        const response = await transport.handleRequest(new Request('http://127.0.0.1/mcp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }),
+        }));
+        assert.equal(response.status, 200);
+        const message = await response.json();
+        assert.ok(isJSONRPCResultResponse(message) && isCallToolResult(message.result));
+        const [content] = message.result.content;
+        assert.ok(content?.type === 'text');
+        assert.equal(message.result.isError, undefined, content.text);
+        return JSON.parse(content.text);
+      } finally {
+        await server.close();
+      }
+    }
+
+    const page = await callTool('list_videos', { limit: 1 });
+    const listedAlias = page.items[0].job_id;
+    assert.equal((await callTool('get_job_status', { job_id: listedAlias })).job_id, listedAlias);
+    const nextPage = await callTool('list_videos', { limit: 1, cursor: page.next_cursor });
+    assert.equal(nextPage.items[0].job_id, rows[1].job_id);
+
     const restricted = new Client({ connectionString: readerUrl.toString() });
     await restricted.connect();
     try {

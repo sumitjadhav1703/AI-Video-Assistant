@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { SANS, MONO, CREAM, SUBTLE, MUTE, DIM } from '../lib/theme';
-import { toItems, toLines, toParagraphs, stripMd, humanSize } from '../lib/parse';
+import { toLines, toParagraphs, stripMd, humanSize } from '../lib/parse';
 import Chat from './Chat';
 
 const CARD = {
@@ -21,12 +21,13 @@ const TODAY = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 's
 
 export default function Results({ result, meta, chat, onAsk, economyOnly, sampleMedia, presetQuestions, onSeek }) {
   const [transcriptOpen, setTranscriptOpen] = useState(false);
+  const transcript = transcriptOpen ? toParagraphs(result.transcript) : [];
 
   // The backend emits a "No … found." placeholder string when the LLM extracts
   // nothing. Detect it and drop the whole group so an empty card never renders.
   const EMPTY_RE = /^no\b.*\bfound\.?$/i;
   const buildItems = (raw) => {
-    const items = toItems(raw);
+    const items = toLines(raw);
     if (items.length === 1 && EMPTY_RE.test(items[0])) return [];
     return items;
   };
@@ -55,8 +56,8 @@ export default function Results({ result, meta, chat, onAsk, economyOnly, sample
   );
 
   return (
-    <article>
-      <section style={{ padding: sampleMedia ? '24px var(--result-section-gutter) 36px' : '9vh 44px 60px', maxWidth: 1160, margin: '0 auto', position: 'relative' }}>
+    <article className={sampleMedia ? 'session-results sample-results' : 'session-results'}>
+      <section style={{ padding: sampleMedia ? '24px var(--result-section-gutter) 36px' : '9vh var(--result-section-gutter) 60px', maxWidth: 1160, margin: '0 auto', position: 'relative' }}>
         <div style={{ ...LABEL, marginBottom: 30, animation: 'fadeIn .6s ease both' }}>{sampleMedia ? 'Prepared sample' : `Session — ${TODAY}`}</div>
         <h1
           style={{
@@ -143,7 +144,6 @@ export default function Results({ result, meta, chat, onAsk, economyOnly, sample
               {g.items.map((text, i) => (
                 <div
                   key={i}
-                  data-hov="1"
                   style={{
                     display: 'grid',
                     gridTemplateColumns: '36px 1fr',
@@ -178,7 +178,7 @@ export default function Results({ result, meta, chat, onAsk, economyOnly, sample
           <span style={LABEL}>Transcript</span>
           <div style={{ maxWidth: 760 }}>
             <button
-              data-hov="1"
+              aria-expanded={transcriptOpen}
               onClick={() => setTranscriptOpen((o) => !o)}
               style={{
                 background: 'none',
@@ -197,8 +197,8 @@ export default function Results({ result, meta, chat, onAsk, economyOnly, sample
             </button>
             {transcriptOpen && (
               <div style={{ marginTop: 34, animation: 'fadeUp .5s ease both' }}>
-                {toParagraphs(result.transcript).length ? (
-                  toParagraphs(result.transcript).map((p, i) => (
+                {transcript.length ? (
+                  transcript.map((p, i) => (
                     <p key={i} style={{ margin: '0 0 18px', fontSize: 14, lineHeight: 1.8, color: SUBTLE }}>
                       {p}
                     </p>

@@ -128,7 +128,8 @@ class RecoveryTests(unittest.TestCase):
         self.assertEqual(db.job_ids_older_than(0), ['crashed'])
         self.assertEqual([row['owner_token'] for row in db.inspect_slots()], [chat_token])
         self.assertEqual(self.counters(), before)
-        self.assertEqual(db.begin_delete('crashed'), 'interrupted')
+        db.delete_job('crashed')
+        self.assertIsNone(db.get_job_status('crashed'))
 
     def test_recent_processing_progress_blocks_recovery_even_with_old_slot(self):
         token = db.admit_job('working', 'english', 'ip', self.settings)
@@ -151,14 +152,15 @@ class RecoveryTests(unittest.TestCase):
         self.age_slot('chat')
         self.assertTrue(db.inspect_slots()[0]['stale'])
         with self.assertRaises(JobBusy):
-            db.begin_delete('done')
+            db.delete_job('done')
 
         db.recover_slot('chat', token, all_workers_stopped=True)
 
         self.assertEqual(db.get_job('done'), job)
         self.assertEqual(db.inspect_slots(), [])
         self.assertEqual(self.counters(), before)
-        self.assertEqual(db.begin_delete('done'), 'done')
+        db.delete_job('done')
+        self.assertIsNone(db.get_job_status('done'))
 
     def test_competing_recovery_cannot_clear_a_replacement_token(self):
         token = db.admit_job('queued-crash', 'english', 'ip', self.settings)

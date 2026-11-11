@@ -12,6 +12,48 @@ from backend.usage_limits import LimitExceeded
 PROFILE = {'provider': 'groq', 'model': 'whisper-large-v3-turbo', 'keyenv': 'GROQ_API_KEY', 'verified_free': True, 'rpm': 2, 'rpd': 3, 'audio_seconds_hour': 30, 'audio_seconds_day': 60}
 
 class AudioBudgetTests(unittest.TestCase):
+    def test_groq_redirect_is_not_followed_and_configured_host_is_fixed(self):
+        import httpx
+        from groq import GroqError
+
+        seen = []
+
+        def respond(transport, request):
+            seen.append((request.url.host, request.url.path))
+            self.assertIn(b'filename="', request.read())
+            return httpx.Response(307, headers={'Location': 'https://unexpected.invalid/collect'})
+
+        profile = SimpleNamespace(model='model', keyenv='GROQ_API_KEY')
+        with tempfile.NamedTemporaryFile(suffix='.wav') as sample:
+            with wave.open(sample.name, 'wb') as wav:
+                wav.setparams((1, 2, 8000, 0, 'NONE', 'not compressed'))
+                wav.writeframes(b'\x00\x00' * 8000)
+            with patch.object(transcriber.audio_budget, 'profile_for_language', return_value=profile), \
+                    patch.object(transcriber, 'current_operation', return_value='job'), \
+                    patch.object(transcriber.audio_budget, 'reserve_audio_attempt') as reserve, \
+                    patch.object(httpx.HTTPTransport, 'handle_request', new=respond), \
+                    patch.dict(os.environ, {'GROQ_API_KEY': 'fixture', 'GROQ_BASE_URL': 'https://override.invalid'}):
+                with self.assertRaises(GroqError):
+                    transcriber._groq_segments(sample.name)
+        self.assertEqual(seen, [('api.groq.com', '/openai/v1/audio/transcriptions')])
+        reserve.assert_called_once_with('job', profile, 1000)
+
+    def test_sarvam_refuses_redirect_response_without_forwarding_key(self):
+        profile = SimpleNamespace(model='model', keyenv='SARVAM_API_KEY')
+        with tempfile.NamedTemporaryFile(suffix='.wav') as sample, \
+                patch.object(transcriber.audio_budget, 'profile_for_language', return_value=profile), \
+                patch.object(transcriber, '_wav_duration_ms', return_value=1000), \
+                patch.object(transcriber, 'current_operation', return_value='job'), \
+                patch.object(transcriber.audio_budget, 'reserve_audio_attempt') as reserve, \
+                patch.object(transcriber.requests, 'post') as post, \
+                patch.dict(os.environ, {'SARVAM_API_KEY': 'fixture'}):
+            post.return_value.status_code = 307
+            with self.assertRaisesRegex(RuntimeError, 'redirect'):
+                transcriber._send_to_sarvam(sample.name)
+            self.assertFalse(post.call_args.kwargs['allow_redirects'])
+            post.return_value.json.assert_not_called()
+            reserve.assert_called_once_with('job', profile, 1000)
+
     def test_profile_must_be_explicit_verified_and_bounded(self):
         with patch.dict(os.environ, {'ENABLE_PROVIDER_CALLS': 'true', 'RATE_LIMIT_SECRET': 's' * 32}, clear=True):
             with self.assertRaises((ValueError, RuntimeError)):
@@ -50,7 +92,7 @@ class AudioBudgetTests(unittest.TestCase):
 
     def test_cli_preflight_rejects_unapproved_profile_before_admission(self):
         from backend import cli
-        with patch.object(cli, 'require_provider_calls'), patch.object(cli, 'get_llm'), patch.object(cli, 'get_embeddings'), patch.object(cli, 'profile_for_language', side_effect=ValueError('unapproved'), create=True) as profile, patch.object(cli.db, 'admit_job') as admit, patch.dict(os.environ, {'ENABLE_PROVIDER_CALLS': 'true', 'RATE_LIMIT_SECRET': 'x' * 32}):
+        with patch.object(cli, 'require_provider_calls'), patch.object(cli, 'get_llm'), patch.object(cli, 'get_embeddings'), patch.object(cli, 'load_ranker'), patch.object(cli, 'profile_for_language', side_effect=ValueError('unapproved'), create=True) as profile, patch.object(cli.db, 'admit_job') as admit, patch.dict(os.environ, {'ENABLE_PROVIDER_CALLS': 'true', 'RATE_LIMIT_SECRET': 'x' * 32}):
             with self.assertRaises(ValueError):
                 cli.run_pipeline('audio.wav')
             profile.assert_called_once_with('english')

@@ -61,6 +61,12 @@ class GuardrailsTests(unittest.TestCase):
             with self.subTest(value=value):
                 self.assertIn(value, sanitize_text(value))
 
+    def test_standalone_configured_provider_key_formats_are_redacted(self):
+        for key in ('gsk_' + 'a' * 52, 'AIza' + 'z' * 35, 'nvapi-' + 'x' * 43, 'sk-or-v1-' + 'f' * 64):
+            with self.subTest(prefix=key[:4]):
+                text = 'Use ' + key + ' tomorrow.'
+                self.assertEqual(sanitize_text(text), 'Use ' + '█' * len(key) + ' tomorrow.')
+
     def test_cross_segment_card_and_phone(self):
         for parts, secret in [(['Card 4111 1111', '1111 1111'], '4111 1111'), (['Call +91 98765', '43210 now'], '98765')]:
             with self.subTest(parts=parts):

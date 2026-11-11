@@ -1,7 +1,5 @@
 .demo-sample {
   --result-section-gutter: clamp(16px, 4vw, 44px);
-  --result-card-padding: clamp(20px, 4vw, 44px);
-  --result-card-columns: minmax(140px, 200px) minmax(0, 1fr);
 }
 
 .demo-sample-nav {
@@ -54,16 +52,4 @@
   flex-wrap: wrap;
   gap: 10px;
   margin-bottom: 24px;
-}
-
-@media (max-width: 640px) {
-  .demo-sample {
-    --result-card-columns: minmax(0, 1fr);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .demo-sample * {
-    animation: none !important;
-  }
 }

@@ -13,7 +13,7 @@ from langchain_postgres import PGVector
 from sqlalchemy import create_engine
 
 from backend import db
-from backend.core.vector_store import collection_for, delete_vector_store
+from backend.db import collection_for, delete_vector_store
 
 
 class FixtureEmbeddings(Embeddings):

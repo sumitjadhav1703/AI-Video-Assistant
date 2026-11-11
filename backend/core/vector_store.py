@@ -9,7 +9,7 @@ from langchain_core.embeddings import Embeddings
 from langchain_postgres import PGVector
 
 from .. import db
-from ..db import get_sqlalchemy_url
+from ..db import collection_for, get_sqlalchemy_url
 from ..usage_limits import require_provider_calls
 from .llm_gateway import validate_transcript, current_operation, assert_private_runtime
 from .guardrails import sanitize_text
@@ -17,12 +17,6 @@ from . import provider_budget
 
 EMBEDDING_MODEL = 'gemini-embedding-001'
 EMBEDDING_DIMENSION = 768
-
-
-def collection_for(job_id: str) -> str:
-    if not job_id:
-        raise ValueError('job_id is required — vector stores are never shared across jobs')
-    return f'job_{job_id}'
 
 
 def normalize_embedding(values):
@@ -122,19 +116,3 @@ def load_vector_store(job_id: str) -> PGVector:
         raise RetrievalUnavailable('This legacy index must be reprocessed before hybrid chat.')
     return PGVector(collection_name=collection_for(job_id), embeddings=get_embeddings(),
                     connection=get_sqlalchemy_url(), use_jsonb=True)
-
-
-def get_retriever(vector_store, k=4):
-    return vector_store.as_retriever(search_type='similarity', search_kwargs={'k':k})
-
-
-def delete_vector_store(job_id: str) -> None:
-    collection = collection_for(job_id)
-    with db.connect() as conn, conn.cursor() as cur:
-        cur.execute("SELECT to_regclass('langchain_pg_collection') AS table_name")
-        if cur.fetchone()['table_name']:
-            cur.execute('DELETE FROM langchain_pg_collection WHERE name = %s', (collection,))
-        cur.execute("SELECT to_regclass('transcript_chunks') AS table_name")
-        if cur.fetchone()['table_name']:
-            cur.execute('DELETE FROM transcript_chunks WHERE job_id=%s', (job_id,))
-        conn.commit()

@@ -16,6 +16,8 @@ COPY scripts/prepare_reranker.py ./scripts/prepare_reranker.py
 RUN python scripts/prepare_reranker.py
 
 # Render injects $PORT.
-ENV PORT=8000
+ENV PORT=8000 HOME=/tmp
+# Uploaded media is decoded by an unprivileged process.
+USER 65532:65532
 # Keep job identifiers out of access logs.
 CMD ["sh", "-c", "uvicorn backend.api:app --host 0.0.0.0 --port ${PORT} --no-access-log"]

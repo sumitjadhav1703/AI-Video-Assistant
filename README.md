@@ -46,7 +46,7 @@ Use Python 3.11 in a virtual environment. Install `backend/requirements.lock` (i
 
 ### Interrupted jobs and recovery
 
-Closing a tab leaves processing in progress. A refresh in the same tab resumes the status view. Explicit deletion during active work returns `409`. Cleanup skips active jobs and keeps records when vector deletion fails. Deletion and cleanup preserve usage counters.
+Closing a tab leaves processing in progress. A refresh in the same tab resumes the status view. Explicit deletion during active work returns `409`. Explicit deletion and scheduled cleanup remove the job, chunks, and vector collection in one transaction. They skip active jobs and preserve usage counters.
 
 Uncertain processing or chat work retains its reservation. Stop all old workers and suspend admissions before using `python -m backend.recover inspect` in a private terminal. The [recovery runbook](docs/ROADMAP_STATUS.md#recovery-after-an-interrupted-process) describes the 30-minute minimum age and exact owner-token check. Recovery marks an active job `interrupted` and preserves its consumed quotas. Users retry by starting a new analysis.
 

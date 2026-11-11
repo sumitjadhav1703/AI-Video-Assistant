@@ -9,7 +9,7 @@ import psycopg
 from psycopg.rows import dict_row
 
 from backend import db
-from backend.core.vector_store import delete_vector_store
+from backend.db import delete_vector_store
 
 
 @unittest.skipUnless(os.getenv('TEST_DATABASE_URL'), 'set TEST_DATABASE_URL to an isolated local PostgreSQL')

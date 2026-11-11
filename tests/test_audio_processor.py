@@ -2,12 +2,27 @@ import os
 import subprocess
 import tempfile
 import unittest
+import wave
+from pathlib import Path
 from unittest.mock import patch
 
 from backend.utils import audio_processor as audio
 
 
 class AudioSafetyTests(unittest.TestCase):
+    @unittest.skipUnless(audio.shutil.which(audio.FFMPEG) and audio.shutil.which(audio.FFPROBE), 'requires FFmpeg')
+    def test_uploaded_manifest_cannot_read_a_sibling_audio_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with wave.open(str(root / 'sibling.wav'), 'wb') as wav:
+                wav.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+                wav.writeframes(b'\x00\x00' * 16000)
+            upload = root / 'upload.media'
+            upload.write_text("ffconcat version 1.0\nfile sibling.wav\nduration 1\n")
+            with patch.object(audio.tempfile, 'tempdir', directory), self.assertRaises(audio.MediaValidationError):
+                audio.chunk_streaming(str(upload))
+            self.assertEqual({path.name for path in root.iterdir()}, {'sibling.wav', 'upload.media'})
+
     def test_invalid_media_has_safe_validation_error(self):
         with patch.object(audio.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, stdout=b'601')):
             with self.assertRaises(audio.MediaValidationError):
@@ -23,7 +38,7 @@ class AudioSafetyTests(unittest.TestCase):
                 patch.object(audio.yt_dlp, 'YoutubeDL') as client:
             client.return_value.__enter__.return_value.extract_info.return_value = {'duration': 601}
             with self.assertRaises(ValueError):
-                audio.download_youtube_audio('https://youtu.be/abc')
+                audio.download_youtube_audio('https://youtu.be/abcdefghijk')
             self.assertEqual(client.call_args.args[0]['max_filesize'], 25 * 1024 * 1024)
 
     def test_invalid_durations_are_rejected_before_conversion(self):
@@ -56,7 +71,7 @@ class AudioSafetyTests(unittest.TestCase):
             self.assertEqual(os.listdir(root), [])
 
     def test_youtube_disabled_and_invalid_urls_never_download(self):
-        urls = ['https://youtube.com/watch?v=x', 'http://youtube.com/watch?v=x', 'https://youtube.com:443/watch?v=x', 'https://youtube.com@localhost/watch?v=x', 'https://evil.example/video']
+        urls = ['https://youtube.com/watch?v=abcdefghijk', 'http://youtube.com/watch?v=abcdefghijk', 'https://youtube.com:443/watch?v=abcdefghijk', 'https://youtube.com@localhost/watch?v=abcdefghijk', 'https://evil.example/video']
         for url in urls:
             with self.subTest(url=url), patch.dict(os.environ, {'ENABLE_YOUTUBE': 'false'}), patch.object(audio.yt_dlp, 'YoutubeDL') as client:
                 with self.assertRaises(ValueError):
@@ -65,19 +80,33 @@ class AudioSafetyTests(unittest.TestCase):
 
     def test_enabled_youtube_validates_host_and_rejects_playlists(self):
         with patch.dict(os.environ, {'ENABLE_YOUTUBE': 'true'}):
-            self.assertEqual(audio.validate_youtube_url('https://youtu.be/abc'), 'https://youtu.be/abc')
-            for url in ('http://youtube.com/watch?v=x', 'https://youtube.com:443/watch?v=x',
+            for url in ('https://youtu.be/abcdefghijk', 'https://m.youtube.com/watch?v=abcdefghijk',
+                        'https://www.youtube.com/shorts/abcdefghijk'):
+                self.assertEqual(audio.validate_youtube_url(url), 'https://www.youtube.com/watch?v=abcdefghijk')
+            for url in ('http://youtube.com/watch?v=abcdefghijk', 'https://youtube.com:443/watch?v=abcdefghijk',
                         'https://youtube.com@localhost/x', 'https://127.0.0.1/x',
-                        'https://youtube.com/playlist?list=abc', 'https://youtube.com/watch?v=x&list=abc'):
+                        'https://youtube.com/playlist?list=abc', 'https://youtube.com/watch?v=abcdefghijk&list=abc'):
                 with self.subTest(url=url), self.assertRaises(ValueError):
                     audio.validate_youtube_url(url)
+
+    def test_youtube_rejects_redirects_and_uses_single_video_extractor(self):
+        with patch.dict(os.environ, {'ENABLE_YOUTUBE': 'true'}), patch.object(audio.yt_dlp, 'YoutubeDL') as client:
+            with self.assertRaisesRegex(ValueError, 'single YouTube video'):
+                audio.download_youtube_audio('https://www.youtube.com/redirect?q=https%3A%2F%2Fexample.invalid')
+            client.assert_not_called()
+            downloader = client.return_value.__enter__.return_value
+            downloader.extract_info.return_value = {'duration': 601}
+            with self.assertRaises(audio.MediaValidationError):
+                audio.download_youtube_audio('https://youtu.be/abcdefghijk?si=share')
+            self.assertEqual(client.call_args.args[0]['allowed_extractors'], ['youtube'])
+            downloader.extract_info.assert_called_once_with('https://www.youtube.com/watch?v=abcdefghijk', download=False)
 
     def test_download_failure_removes_private_directory(self):
         with tempfile.TemporaryDirectory() as root, patch.object(audio.tempfile, 'tempdir', root), \
                 patch.dict(os.environ, {'ENABLE_YOUTUBE': 'true'}), patch.object(audio.yt_dlp, 'YoutubeDL') as client:
             client.return_value.__enter__.return_value.extract_info.side_effect = RuntimeError('failed')
             with self.assertRaises(RuntimeError):
-                audio.download_youtube_audio('https://youtube.com/watch?v=x')
+                audio.download_youtube_audio('https://youtube.com/watch?v=abcdefghijk')
             self.assertEqual(os.listdir(root), [])
 
     def test_youtube_challenge_offers_upload_without_using_cookies(self):
@@ -87,7 +116,7 @@ class AudioSafetyTests(unittest.TestCase):
             downloader = client.return_value.__enter__.return_value
             downloader.extract_info.side_effect = audio.yt_dlp.utils.DownloadError("Sign in to confirm you're not a bot")
             with self.assertRaisesRegex(audio.MediaValidationError, 'Upload an audio or video file'):
-                audio.download_youtube_audio('https://youtu.be/abc')
+                audio.download_youtube_audio('https://youtu.be/abcdefghijk')
             self.assertNotIn('cookiefile', client.call_args.args[0])
             self.assertEqual(os.listdir(root), [])
 
@@ -99,7 +128,7 @@ class AudioSafetyTests(unittest.TestCase):
                 downloader = client.return_value.__enter__.return_value
                 downloader.extract_info.return_value = info
                 with self.assertRaises(ValueError):
-                    audio.download_youtube_audio('https://youtube.com/watch?v=x')
+                    audio.download_youtube_audio('https://youtube.com/watch?v=abcdefghijk')
                 downloader.process_ie_result.assert_not_called()
                 self.assertEqual(os.listdir(root), [])
 
@@ -116,7 +145,7 @@ class AudioSafetyTests(unittest.TestCase):
                 options['progress_hooks'][0]({'downloaded_bytes': 1048577})
             downloader.process_ie_result.side_effect = download
             with self.assertRaises(ValueError):
-                audio.download_youtube_audio('https://youtu.be/abc')
+                audio.download_youtube_audio('https://youtu.be/abcdefghijk')
             self.assertEqual(os.listdir(root), [])
 
     def test_missing_ffmpeg_removes_chunk_directory(self):
@@ -134,7 +163,7 @@ class AudioSafetyTests(unittest.TestCase):
             open(path, 'wb').close()
             with patch.object(audio, 'download_youtube_audio', return_value=path), patch.object(audio, 'chunk_streaming', side_effect=RuntimeError('bad media')):
                 with self.assertRaises(RuntimeError):
-                    audio.process_input('https://youtube.com/watch?v=x')
+                    audio.process_input('https://youtube.com/watch?v=abcdefghijk')
             self.assertFalse(os.path.exists(directory))
 
 

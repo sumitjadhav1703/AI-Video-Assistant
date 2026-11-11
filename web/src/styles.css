@@ -18,20 +18,11 @@ a:hover { color: #ffffff; }
 button { font-family: inherit; }
 input::placeholder { color: #57544e; }
 
-/* Native cursor is hidden only where a real pointer + hover exists (desktop),
-   so the custom dot/ring takes over there and touch devices keep their cursor. */
-@media (hover: hover) and (pointer: fine) {
-  body.custom-cursor,
-  body.custom-cursor * { cursor: none !important; }
-}
-
 @keyframes lineUp   { from { transform: translateY(115%); } to { transform: translateY(0); } }
 @keyframes fadeUp   { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
 @keyframes fadeIn   { from { opacity: 0; } to { opacity: 1; } }
 @keyframes pulseDot { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
-@keyframes marqueeMove { to { transform: translateX(-50%); } }
 @keyframes wave     { 0%, 100% { transform: scaleY(0.10); } 50% { transform: scaleY(1); } }
-@keyframes logoWave { 0%, 100% { transform: scaleY(0.4); } 50% { transform: scaleY(1); } }
 
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #0e0e0d; }
@@ -112,3 +103,28 @@ input::placeholder { color: #57544e; }
   font-weight: 400;
 }
 .demo-session, .demo-resume, .demo-feedback { margin-block: 18px; }
+
+.session-results {
+  --result-section-gutter: clamp(16px, 4vw, 44px);
+  --result-card-columns: minmax(140px, 220px) minmax(0, 1fr);
+  overflow-wrap: anywhere;
+}
+
+.sample-results {
+  --result-card-padding: clamp(20px, 4vw, 44px);
+  --result-card-columns: minmax(140px, 200px) minmax(0, 1fr);
+}
+
+.chat-compose { display: flex; gap: 14px; }
+
+@media (max-width: 640px) {
+  .session-results {
+    --result-card-columns: minmax(0, 1fr);
+    --result-card-padding: 20px;
+    --chat-button-padding: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .session-results * { animation: none !important; }
+}
