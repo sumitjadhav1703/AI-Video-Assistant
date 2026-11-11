@@ -1,0 +1,6 @@
+# Generate a disposable token with: node -e 'console.log(require("node:crypto").randomBytes(32).toString("base64url"))'
+MCP_BEARER_TOKEN=
+MCP_HOSTNAME=127.0.0.1:8787
+MCP_ENVIRONMENT=preview
+# Export CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE
+# in the shell that starts Wrangler. Use the disposable reader DSN.

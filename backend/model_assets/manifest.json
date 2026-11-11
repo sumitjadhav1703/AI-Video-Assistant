@@ -1,0 +1,16 @@
+{
+  "model": "ms-marco-TinyBERT-L-2-v2",
+  "revision": "858a1ac046a05663a35367eac852d7f76feeefdd",
+  "source_url": "https://huggingface.co/prithivida/flashrank/resolve/858a1ac046a05663a35367eac852d7f76feeefdd/ms-marco-TinyBERT-L-2-v2.zip",
+  "archive_sha256": "752eddf1c5ece3c5e6115e9ab52eb3b16436bbf9b3a091cbb62b5b8eadc47105",
+  "license": "cc-by-sa-4.0",
+  "files": {
+    "tokenizer_config.json": "eaf913a687e8eed3010b6479d0d84631038212aa50c14d9b812e08cbc891d925",
+    "special_tokens_map.json": "303df45a03609e4ead04bc3dc1536d0ab19b5358db685b6f3da123d05ec200e3",
+    "config.json": "2144195e107cd7ea61556478e7add12986ebfbc3085f924fc0b90c2410604879",
+    "tokenizer.json": "ce64fce797c24f68df90b40a3f74f579b336a493db14bd583fd520ea0d8c9a98",
+    "flashrank-TinyBERT-L-2-v2.onnx": "a2b09fb0de692c052a55f4165c9461377b4a31115673b7adb428503d69109196"
+  },
+  "attribution": "FlashRank ONNX model export by prithivida; upstream model cross-encoder/ms-marco-TinyBERT-L-2-v2. Artifact repository declares CC-BY-SA-4.0.",
+  "license_url": "https://creativecommons.org/licenses/by-sa/4.0/"
+}

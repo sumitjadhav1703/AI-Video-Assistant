@@ -5,6 +5,9 @@ cookies.txt
 frontend/.streamlit/secrets.toml
 
 # Python
+.DS_Store
+output/
+/backend/model_assets/ms-marco-TinyBERT-L-2-v2/
 __pycache__/
 *.py[cod]
 .venv/

@@ -3,92 +3,49 @@ import requests
 from groq import Groq
 from pydub import AudioSegment
 
+from ..usage_limits import require_provider_calls
+from .llm_gateway import validate_transcript, current_operation
+from . import audio_budget
+from .telemetry import duration as duration_metric, metric
+
 # Sarvam's sync STT-translate API rejects audio longer than 30s.
 # We slice each chunk into 25s pieces (with a 5s safety margin) before sending.
 SARVAM_PIECE_SECONDS = 25
 
 
-SARVAM_API_KEY = os.getenv("SARVAM_API_KEY")
 SARVAM_STT_TRANSLATE_URL = "https://api.sarvam.ai/speech-to-text-translate"
-SARVAM_MODEL = os.getenv("SARVAM_STT_MODEL", "saaras:v2.5")
 
 # Groq caps uploads at 25MB. utils.audio_processor normalizes every source to
 # 16kHz mono and chunks at 5 minutes (~9.6MB), which keeps us under that ceiling.
-GROQ_MODEL = os.getenv("GROQ_STT_MODEL", "whisper-large-v3-turbo")
 
 
 def transcribe_chunk_groq(chunk_path: str) -> str:
-    """Send one chunk to Groq's hosted Whisper and return the English transcript."""
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        raise RuntimeError("GROQ_API_KEY is not set in environment / .env")
-
-    client = Groq(api_key=api_key)
-
-    with open(chunk_path, "rb") as f:
-        result = client.audio.transcriptions.create(
-            file=(os.path.basename(chunk_path), f.read()),
-            model=GROQ_MODEL,
-            response_format="text",
-        )
-
-    # response_format="text" yields a plain string; the SDK returns an object otherwise.
-    return result if isinstance(result, str) else result.text
+    from .guardrails import sanitize_text
+    segments = _groq_segments(chunk_path)
+    return sanitize_text(' '.join((item.get('text', '') if isinstance(item, dict) else item.text) for item in segments))
 
 
 def _send_to_sarvam(piece_path: str) -> str:
-    """Send one ≤30s WAV file to Sarvam and return the English transcript."""
-    headers = {"api-subscription-key": SARVAM_API_KEY}
-
-    with open(piece_path, "rb") as f:
-        files = {"file": (os.path.basename(piece_path), f, "audio/wav")}
-        data = {"model": SARVAM_MODEL, "with_diarization": "false"}
+    profile = audio_budget.profile_for_language('hinglish')
+    duration = _wav_duration_ms(piece_path)
+    audio_budget.reserve_audio_attempt(current_operation(), profile, duration)
+    with open(piece_path, 'rb') as f:
         response = requests.post(
             SARVAM_STT_TRANSLATE_URL,
-            headers=headers,
-            files=files,
-            data=data,
-            timeout=120,
+            headers={'api-subscription-key': os.environ[profile.keyenv]},
+            files={'file': (os.path.basename(piece_path), f, 'audio/wav')},
+            data={'model': profile.model, 'with_diarization': 'false'}, timeout=120,
         )
-
     if not response.ok:
-        print(f"\n❌ Sarvam returned {response.status_code}")
-        print(f"Response body: {response.text}\n")
         response.raise_for_status()
-
-    return response.json().get("transcript", "")
+    return response.json().get('transcript', '')
 
 
 def transcribe_chunk_sarvam(chunk_path: str) -> str:
-    """
-    Sarvam sync API only accepts ≤30s audio. We split this chunk into
-    25-second pieces, send each separately, and join the transcripts.
-    """
-    if not SARVAM_API_KEY:
-        raise RuntimeError("SARVAM_API_KEY is not set in environment / .env")
-
-    audio = AudioSegment.from_wav(chunk_path)
-    piece_ms = SARVAM_PIECE_SECONDS * 1000
-
-    full_text = ""
-    total_pieces = (len(audio) + piece_ms - 1) // piece_ms
-
-    for i, start in enumerate(range(0, len(audio), piece_ms)):
-        piece = audio[start: start + piece_ms]
-        piece_path = f"{chunk_path}_sv_{i}.wav"
-        piece.export(piece_path, format="wav")
-
-        try:
-            print(f"  → Sarvam piece {i + 1}/{total_pieces} ...")
-            full_text += _send_to_sarvam(piece_path) + " "
-        finally:
-            if os.path.exists(piece_path):
-                os.remove(piece_path)
-
-    return full_text.strip()
-
-   
-
+    from .guardrails import sanitize_text
+    audio_budget.profile_for_language('hinglish')
+    segments = _sarvam_segments(chunk_path, _wav_duration_ms(chunk_path))
+    return sanitize_text(' '.join(segment['text'] for segment in segments))
 
 
 def transcribe_chunk(chunk_path: str, language: str = "english") -> str:
@@ -97,26 +54,98 @@ def transcribe_chunk(chunk_path: str, language: str = "english") -> str:
     - english  → Groq (hosted whisper-large-v3-turbo)
     - hinglish → Sarvam (translates to English while transcribing)
     """
-    if language.lower() == "hinglish":
+    if language == "hinglish":
         return transcribe_chunk_sarvam(chunk_path)
-    return transcribe_chunk_groq(chunk_path)
+    if language == "english":
+        return transcribe_chunk_groq(chunk_path)
+    raise ValueError("Unsupported transcription language")
 
 
 def transcribe_all(chunks: list, language: str = "english") -> str:
+    from .guardrails import sanitize_text
+    return sanitize_text(' '.join(segment['text'] for segment in transcribe_segments(chunks, language)))
 
-    full_transcript = "" 
 
-    engine = "Sarvam AI" if language.lower() == "hinglish" else "Groq Whisper"
-    print(f"Using {engine} for transcription.")
+def _wav_duration_ms(path):
+    import wave
+    with wave.open(path, 'rb') as wav:
+        rate = wav.getframerate()
+        return (wav.getnframes() * 1000 + rate - 1) // rate
 
-    for i, chunk in enumerate(chunks):  
 
-        print(f"Transcribing chunk {i + 1}/{len(chunks)}...")
+def _groq_segments(path):
+    profile = audio_budget.profile_for_language('english')
+    duration = _wav_duration_ms(path)
+    audio_budget.reserve_audio_attempt(current_operation(), profile, duration)
+    client = Groq(api_key=os.environ[profile.keyenv], timeout=60, max_retries=0)
+    with open(path, 'rb') as f:
+        result = client.audio.transcriptions.create(
+            file=(os.path.basename(path), f.read()), model=profile.model,
+            response_format='verbose_json', timestamp_granularities=['segment'],
+        )
+    return result.segments if hasattr(result, 'segments') else result.get('segments', [])
 
-        text = transcribe_chunk(chunk, language=language)  
 
-        full_transcript += text + " "  
+def _sarvam_segments(path, duration):
+    require_provider_calls(sarvam=True)
+    if not os.getenv('SARVAM_API_KEY', '').strip():
+        raise RuntimeError('SARVAM_API_KEY is not set')
+    with open(path, 'rb') as audio_file:
+        audio = AudioSegment.from_wav(audio_file)
+    result = []
+    for i, start in enumerate(range(0, duration, SARVAM_PIECE_SECONDS * 1000)):
+        piece_path = f'{path}_sv_{i}.wav'
+        try:
+            with open(piece_path, 'wb') as piece_file:
+                audio[start:min(start + SARVAM_PIECE_SECONDS * 1000, duration)].export(piece_file, format='wav')
+            text = _send_to_sarvam(piece_path)
+            if not isinstance(text, str) or not text.strip():
+                raise ValueError('Transcription returned empty text.')
+            result.append({'text': text.strip(), 'start_ms': start, 'end_ms': min(start + SARVAM_PIECE_SECONDS * 1000, duration), 'timing_precision': 'piece'})
+            validate_transcript(' '.join(segment['text'] for segment in result))
+        finally:
+            if os.path.exists(piece_path):
+                os.remove(piece_path)
+    return result
 
-    print("Transcription complete.")
 
-    return full_transcript.strip()  
+def transcribe_segments(chunks: list[str], language: str = 'english') -> list[dict]:
+    import math
+    if language not in ('english', 'hinglish'):
+        raise ValueError('Unsupported transcription language')
+    offset = 0
+    segments = []
+    for path in chunks:
+        duration = _wav_duration_ms(path)
+        if duration <= 0:
+            raise ValueError('Audio duration must be positive.')
+        if language == 'hinglish':
+            with duration_metric('stt_chunk'):
+                current = _sarvam_segments(path, duration)
+        else:
+            current = []
+            previous_end = 0
+            with duration_metric("stt_chunk"):
+                groq_segments = _groq_segments(path)
+            for item in groq_segments or []:
+                get = item.get if isinstance(item, dict) else lambda key: getattr(item, key, None)
+                text, start, end = get('text'), get('start'), get('end')
+                if not isinstance(text, str) or not text.strip() or isinstance(start, bool) or isinstance(end, bool) or not isinstance(start, (int, float)) or not isinstance(end, (int, float)) or not math.isfinite(start) or not math.isfinite(end):
+                    raise ValueError('Invalid transcription segment.')
+                if start < previous_end or end < start or end * 1000 > duration:
+                    raise ValueError('Invalid transcription timestamps.')
+                start_ms, end_ms = round(start * 1000), round(end * 1000)
+                previous_end = end
+                current.append({'text': text.strip(), 'start_ms': start_ms, 'end_ms': end_ms, 'timing_precision': 'segment'})
+        if not current:
+            raise ValueError('Transcription returned empty text.')
+        for segment in current:
+            segment['start_ms'] += offset
+            segment['end_ms'] += offset
+        segments.extend(current)
+        metric("stt_chunk", audio_duration_ms=duration, segments=len(current))
+        validate_transcript(' '.join(s['text'] for s in segments))
+        offset += duration
+    if not segments:
+        raise ValueError('Transcription returned empty text.')
+    return segments

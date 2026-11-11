@@ -1,0 +1,28 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ai-video-assistant-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-10",
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": { "enabled": false },
+  "vars": {
+    "MCP_HOSTNAME": "",
+    "MCP_ENVIRONMENT": "production"
+  },
+  "hyperdrive": [
+    { "binding": "HYPERDRIVE", "id": "00000000000000000000000000000000" }
+  ],
+  "ratelimits": [
+    { "name": "MCP_RATE_LIMIT", "namespace_id": "100000031", "simple": { "limit": 20, "period": 60 } }
+  ],
+  "previews": {
+    "vars": { "MCP_HOSTNAME": "", "MCP_ENVIRONMENT": "preview" },
+    "hyperdrive": [
+      { "binding": "HYPERDRIVE", "id": "00000000000000000000000000000001" }
+    ],
+    "ratelimits": [
+      { "name": "MCP_RATE_LIMIT", "namespace_id": "100000032", "simple": { "limit": 20, "period": 60 } }
+    ]
+  }
+}

@@ -1,80 +1,84 @@
-// Single funnel for every backend call. The backend URL is public (a Render
-// HTTPS endpoint), never a secret.
-//
-// In dev, calls go to the same-origin `/api` path, which the Vite dev server
-// proxies to the backend server-side — this sidesteps CORS so `npm run dev`
-// works against the deployed backend without adding localhost to the backend's
-// allow-list. In production the app talks to the backend directly via
-// VITE_BACKEND_URL (the Vercel origin is authorized on the backend instead).
-const PROD_RAW = import.meta.env.VITE_BACKEND_URL || 'https://ai-video-assistant-backend.onrender.com';
-export const BACKEND_URL = import.meta.env.DEV ? '/api' : PROD_RAW.replace(/\/+$/, '');
+// Vite proxies /api during development. Production uses the public backend URL.
+const ENV = import.meta.env || {};
+const PROD_RAW = ENV.VITE_BACKEND_URL || '';
+export const BACKEND_URL = ENV.PROD ? PROD_RAW.trim().replace(/\/+$/, '') : '/api';
 
-// Render's free tier spins down after 15 min idle and can take ~60s to wake.
-// Every call gets a generous timeout so a cold start reads as "waking up".
 const TIMEOUT = 180000;
 export const COLD_START_HINT =
-  "The backend didn't respond in time. On Render's free tier it spins down after " +
-  '15 minutes idle and takes up to a minute to wake up. Give it a moment and try again.';
+  'The backend did not respond in time. The free instance may be waking up.';
 
-export class BackendError extends Error {}
+export class BackendError extends Error {
+  constructor(message, status = 0, retryAfterMs = 0) {
+    super(message);
+    this.status = status;
+    this.retryAfterMs = retryAfterMs;
+  }
+}
 
-async function callBackend(method, path, { body, headers } = {}) {
+async function callBackend(method, path, { body, headers, signal } = {}) {
   if (!BACKEND_URL) throw new BackendError('Backend URL is not configured.');
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT);
+  const abort = () => controller.abort();
+  if (signal?.aborted) abort();
+  else signal?.addEventListener('abort', abort, { once: true });
+  const timer = setTimeout(abort, TIMEOUT);
 
-  let res;
   try {
-    res = await fetch(`${BACKEND_URL}${path}`, { method, body, headers, signal: controller.signal });
-  } catch (err) {
-    clearTimeout(timer);
-    if (err.name === 'AbortError') throw new BackendError(COLD_START_HINT);
-    throw new BackendError(`Could not reach the backend. ${COLD_START_HINT}`);
-  }
-  clearTimeout(timer);
+    const response = await fetch(`${BACKEND_URL}${path}`, {
+      method, body, headers, signal: controller.signal, cache: 'no-store',
+    });
+    const payload = await response.json().catch((error) => {
+      if (controller.signal.aborted) throw error;
+      return null;
+    });
+    if (response.ok && payload) return payload;
 
-  if (!res.ok) {
-    let detail;
-    try {
-      detail = (await res.json()).detail;
-    } catch {
-      detail = null;
+    const retryAfter = response.status === 429 ? response.headers.get('Retry-After') : null;
+    let retryAfterMs = 0;
+    let message = typeof payload?.detail === 'string'
+      ? payload.detail
+      : `Backend returned ${response.status}.`;
+    if (retryAfter) {
+      retryAfterMs = /^\d+$/.test(retryAfter)
+        ? Number(retryAfter) * 1000
+        : Math.max(0, Date.parse(retryAfter) - Date.now()) || 0;
+      if (retryAfterMs) message += ` Try again in ${Math.ceil(retryAfterMs / 1000)} seconds.`;
     }
-    throw new BackendError(detail || `Backend returned ${res.status}.`);
+    throw new BackendError(message, response.status, retryAfterMs);
+  } catch (error) {
+    if (signal?.aborted || error instanceof BackendError) throw error;
+    if (error.name === 'AbortError') throw new BackendError(COLD_START_HINT);
+    throw new BackendError(`Could not reach the backend. ${COLD_START_HINT}`);
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', abort);
   }
-  return res.json();
 }
 
-// Start a run — either an uploaded file or a YouTube URL, plus the language.
-// Returns { job_id, status }. The pipeline runs in the background on the backend.
-export function startJob({ file, youtubeUrl, language }) {
+export const getDemoMode = (signal) => callBackend('GET', '/demo-mode', { signal });
+
+export function startJob({ file, inviteCode }) {
   const form = new FormData();
-  form.append('language', language);
-  if (file) form.append('file', file, file.name);
-  else form.append('youtube_url', youtubeUrl);
-  return callBackend('POST', '/jobs', { body: form });
+  form.append('file', file, file.name);
+  form.append('language', 'english');
+  form.append('demo_acknowledged', 'true');
+  const headers = inviteCode ? { 'X-Demo-Invite': inviteCode } : undefined;
+  return callBackend('POST', '/jobs', { body: form, headers });
 }
 
-export const getStatus = (jobId) => callBackend('GET', `/jobs/${jobId}`);
-export const getResult = (jobId) => callBackend('GET', `/jobs/${jobId}/result`);
+const jobPath = ({ id }) => `/jobs/${encodeURIComponent(id)}`;
+const jobAuth = ({ token }) => ({ Authorization: `Bearer ${token}` });
 
-export const askChat = (jobId, question) =>
-  callBackend('POST', `/jobs/${jobId}/chat`, {
-    body: JSON.stringify({ question }),
-    headers: { 'Content-Type': 'application/json' },
+export const getStatus = (job, signal) =>
+  callBackend('GET', jobPath(job), { headers: jobAuth(job), signal });
+export const getResult = (job, signal) =>
+  callBackend('GET', `${jobPath(job)}/result`, { headers: jobAuth(job), signal });
+
+export const askChat = (job, question) =>
+  callBackend('POST', `${jobPath(job)}/chat`, {
+    body: JSON.stringify({ question, tier: 'economy' }),
+    headers: { ...jobAuth(job), 'Content-Type': 'application/json' },
   });
 
-export const releaseJob = (jobId) => callBackend('DELETE', `/jobs/${jobId}`);
-
-// Fire-and-forget release for tab close / refresh. `keepalive` lets the request
-// outlive the page during unload (where a normal awaited fetch would be killed),
-// so the job's DB row + vectors get dropped instead of orphaned in Neon.
-export function releaseJobOnUnload(jobId) {
-  if (!jobId || !BACKEND_URL) return;
-  try {
-    fetch(`${BACKEND_URL}/jobs/${jobId}`, { method: 'DELETE', keepalive: true });
-  } catch {
-    /* best-effort — nothing we can do as the page goes away */
-  }
-}
+export const releaseJob = (job) => callBackend('DELETE', jobPath(job), { headers: jobAuth(job) });

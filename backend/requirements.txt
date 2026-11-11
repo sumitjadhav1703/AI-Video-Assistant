@@ -1,7 +1,8 @@
 # ── AI Video Assistant — BACKEND (FastAPI on Render) ──────────────────────────
+# Dependency intent only; install requirements.lock for the tested Python 3.11 runtime.
 # Python >= 3.10. Deliberately contains no torch / openai-whisper / chromadb /
 # sentence-transformers: that stack is ~2GB against Render's 512MB free tier.
-# Speech-to-text is hosted (Groq), embeddings are hosted (Mistral).
+# Speech-to-text is hosted (Groq), embeddings are hosted (Gemini).
 
 # ── Web framework ─────────────────────────────────────────────────────────────
 fastapi>=0.111.0
@@ -19,12 +20,17 @@ audioop-lts>=0.2.1; python_version >= "3.13"
 groq>=0.9.0                       # whisper-large-v3-turbo for English
 requests>=2.32.0                  # Sarvam STT-translate for Hinglish
 
-# ── LLM Orchestration — LangChain LCEL + Mistral ──────────────────────────────
+# ── LLM Orchestration — LangChain LCEL + audited in-process LiteLLM ──────────────────────────────
 langchain>=0.2.0
 langchain-core>=0.2.0
 langchain-community>=0.2.0
-langchain-mistralai>=0.1.0        # Chat + mistral-embed embeddings
+litellm==1.108.0
+langchain-litellm==0.11.2
+openai==3.46.0                   # Groq's OpenAI-compatible generation transport
+httpx==0.28.1                     # Explicit transport controls and offline API tests
 langchain-text-splitters>=0.2.0
+rank-bm25==0.2.2
+FlashRank==0.2.10
 
 # ── Vector store — Neon Postgres + pgvector ───────────────────────────────────
 langchain-postgres>=0.0.12

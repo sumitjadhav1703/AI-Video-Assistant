@@ -8,11 +8,14 @@ RUN apt-get update \
 
 WORKDIR /app
 
-COPY backend/requirements.txt ./backend/requirements.txt
-RUN pip install --no-cache-dir -r backend/requirements.txt
+COPY backend/requirements.lock ./backend/requirements.lock
+RUN pip install --no-cache-dir -r backend/requirements.lock
 
 COPY backend ./backend
+COPY scripts/prepare_reranker.py ./scripts/prepare_reranker.py
+RUN python scripts/prepare_reranker.py
 
 # Render injects $PORT.
 ENV PORT=8000
-CMD ["sh", "-c", "uvicorn backend.api:app --host 0.0.0.0 --port ${PORT}"]
+# Keep job identifiers out of access logs.
+CMD ["sh", "-c", "uvicorn backend.api:app --host 0.0.0.0 --port ${PORT} --no-access-log"]

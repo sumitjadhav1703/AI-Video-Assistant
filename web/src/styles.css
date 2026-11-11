@@ -16,7 +16,6 @@ a:hover { color: #ffffff; }
 ::selection { background: #e8e5de; color: #0e0e0d; }
 
 button { font-family: inherit; }
-select:focus, input:focus, button:focus { outline: none; }
 input::placeholder { color: #57544e; }
 
 /* Native cursor is hidden only where a real pointer + hover exists (desktop),
@@ -38,3 +37,78 @@ input::placeholder { color: #57544e; }
 ::-webkit-scrollbar-track { background: #0e0e0d; }
 ::-webkit-scrollbar-thumb { background: #2a2926; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #57544e; }
+
+:where(button, input, select, summary, a):focus-visible {
+  outline: 2px solid #e8e5de;
+  outline-offset: 4px;
+}
+
+.demo-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 24px;
+  padding: 12px clamp(16px, 5vw, 56px);
+  background: #0e0e0d;
+  border-bottom: 1px solid rgba(232, 229, 222, .22);
+}
+
+.demo-brand { font-size: 1.35rem; font-weight: 600; }
+.demo-paths { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.demo-button {
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px solid rgba(232, 229, 222, .42);
+  border-radius: 9px;
+  color: #e8e5de;
+  background: #191917;
+  font-size: .94rem;
+}
+
+.demo-button:hover:not(:disabled) { background: #33312d; }
+.demo-button[aria-pressed="true"], .demo-upload button:not(:disabled) {
+  color: #0e0e0d;
+  background: #e8e5de;
+}
+.demo-button:disabled { opacity: .6; }
+.demo-panel {
+  width: min(100% - 32px, 680px);
+  margin: clamp(24px, 6vh, 68px) auto;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.demo-panel h1 { line-height: 1.15; text-wrap: balance; margin: 0; }
+.demo-upload {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+  padding: clamp(18px, 4vw, 40px);
+  border: 1px solid rgba(232, 229, 222, .26);
+  border-radius: 18px;
+}
+.demo-upload p { margin: 0; color: #b9b6ad; }
+.demo-upload input { max-width: 100%; font: inherit; color: inherit; }
+.demo-upload input[type=password], .demo-upload input[type=file]::file-selector-button {
+  font: inherit;
+  color: inherit;
+  background: #191917;
+  border: 1px solid rgba(232, 229, 222, .42);
+  border-radius: 7px;
+  min-height: 44px;
+  padding: 8px 12px;
+}
+.demo-upload input[type=file]::file-selector-button { margin-right: 12px; }
+.demo-upload label { font-weight: 600; }
+.demo-upload label.demo-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  font-weight: 400;
+}
+.demo-session, .demo-resume, .demo-feedback { margin-block: 18px; }

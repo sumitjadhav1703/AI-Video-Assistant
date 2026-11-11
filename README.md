@@ -2,18 +2,53 @@
 
 # 🎬 AI Video Assistant
 
-**Transform your audio, video, and YouTube links into actionable insights with the power of LLMs & RAG.**
+**Turn recordings into transcripts, findings, and answers with timestamped citations.**
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://react.dev/)
 [![Vercel](https://img.shields.io/badge/Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://vercel.com/)
-[![Mistral](https://img.shields.io/badge/Mistral_AI-000?style=for-the-badge&logo=mistral)](https://mistral.ai/)
+[![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=for-the-badge)](https://docs.langchain.com/)
 [![Neon](https://img.shields.io/badge/Neon-00E599?style=for-the-badge&logo=postgresql&logoColor=black)](https://neon.tech/)
 
 </div>
 
-AI Video Assistant is an intelligent pipeline that takes a YouTube URL or an uploaded audio/video file, transcribes it, generates summaries, extracts actionable items, and provides a RAG (Retrieval-Augmented Generation) chat interface to converse with the transcript.
-The system is designed with a microservices architecture, separating a robust FastAPI backend from a React (Vite) frontend deployed on Vercel.
+AI Video Assistant transcribes uploaded clips, extracts findings, and answers questions using the transcript. The React/Vite frontend runs on Vercel and the FastAPI backend runs on Render.
+
+The recruiter demo includes a static sample with prepared answers and seekable citations. Live English clip analysis supports invited and public access. It defaults to sample-only mode. See the [recruiter demo guide](docs/RECRUITER_DEMO.md) for configuration, verification, and release gates.
+
+## Local hybrid retrieval upgrade
+
+New jobs use timestamped, sanitized chunks. Dense pgvector and BM25 retrieve ten candidates each. RRF merges the rankings and a required local TinyBERT cross-encoder reranks up to twelve candidates before selecting four passages for cited chat. The generation gateway uses LangChain and LiteLLM. See the [implementation and operator guide](docs/HYBRID_IMPLEMENTATION.md) and [roadmap status](docs/ROADMAP_STATUS.md) for verified behavior and remaining release gates.
+
+## Local safety controls
+
+The local branch adds admission controls; this does not describe a verified new deployment. See [the reviewed upgrade plan](UPGRADE_IMPLEMENTATION_PLAN.md) for the full roadmap and [independent architecture review](docs/reviews/architecture-review.md) for limitations.
+
+Remote inference defaults to **off** (`ENABLE_PROVIDER_CALLS=false`). Verify the free entitlements and billing controls for the exact STT, generation, and embedding routes before enabling it. Configure private `RATE_LIMIT_SECRET` and `JOB_TOKEN_SECRET` values. Live demo requests use English file uploads and one approved route per operation.
+
+Default policy:
+
+| Work | Limit |
+|---|---|
+| Clip submissions | 1 per client and 5 globally per UTC day |
+| Media | 10 MiB upload, 2 minutes maximum |
+| Chat | 2 per client/minute, 3 per job/day, 15 globally/day |
+| Concurrent work | One processing job and one chat request globally |
+| Text | 1,000-character question, 40,000-character transcript, 1,024 output tokens per generation |
+
+Postgres counters survive restarts and job deletion. Failed admitted work consumes allowance. Rejected admission rolls back counters. `429` includes `Retry-After`. Limiter, database, and configuration failures return `503` before inference. Clients on the same IP share quota, and the global cap applies across IPs. Status, results, chat, and deletion require a separate job-bound bearer token that expires after 48 hours.
+
+The server uses the connection address, never arbitrary forwarded headers. Verify trusted reverse-proxy configuration before public enablement; otherwise clients may share a proxy bucket. Keep the global ceiling enabled. No production account settings or schemas were changed by these local edits.
+
+### Tests and local-only development
+
+Use Python 3.11 in a virtual environment. Install `backend/requirements.lock` (includes `httpx` for API tests), then run `python -m unittest discover -s tests -v`. In `web/`, use Node 22 or 24, then run `npm ci`, `npm test`, and `npm run build`. Tests mock providers and never require real credentials. Database integration tests require `TEST_DATABASE_URL` pointing to a disposable **local** Postgres database; they use an isolated schema and do not need pgvector. See the test module for the supported invocation. Point `VITE_BACKEND_URL` at `http://localhost:8000` during development; do not use a hosted backend for routine checks.
+
+### Interrupted jobs and recovery
+
+Closing a tab leaves processing in progress. A refresh in the same tab resumes the status view. Explicit deletion during active work returns `409`. Cleanup skips active jobs and keeps records when vector deletion fails. Deletion and cleanup preserve usage counters.
+
+Uncertain processing or chat work retains its reservation. Stop all old workers and suspend admissions before using `python -m backend.recover inspect` in a private terminal. The [recovery runbook](docs/ROADMAP_STATUS.md#recovery-after-an-interrupted-process) describes the 30-minute minimum age and exact owner-token check. Recovery marks an active job `interrupted` and preserves its consumed quotas. Users retry by starting a new analysis.
 
 ---
 
@@ -52,15 +87,14 @@ flowchart TD
 
     subgraph External_Services ["🌐 External APIs & Services"]
         direction TB
-        YT["▶️ YouTube"]:::external
         Groq["⚡ Groq API (English)"]:::external
-        Sarvam["🗣️ Sarvam API (Hinglish)"]:::external
-        Mistral["🤖 Mistral AI (LLM & Embed)"]:::external
+        Gemini["Gemini (768-dimensional embeddings)"]:::external
+        LiteLLM["LiteLLM (approved free generation route)"]:::external
         Neon[("🐘 Neon Postgres (pgvector)")]:::database
     end
 
     %% Connections
-    UI -->|"Upload/URL"| API_Start
+    UI -->|"Upload clip"| API_Start
     UI -->|"Poll Status"| API_Status
     UI -->|"Fetch Results"| API_Result
     Chat -->|"Ask Question"| API_Chat
@@ -76,11 +110,10 @@ flowchart TD
     JobManager --> LLMEngine
     JobManager --> RAGEngine
 
-    AudioProc -.->|"yt-dlp"| YT
     Transcriber -.->|"Whisper"| Groq
-    Transcriber -.->|"Speech-to-Text"| Sarvam
-    LLMEngine -.->|"Summarize/Extract"| Mistral
-    RAGEngine -.->|"Embeddings"| Mistral
+    LLMEngine -.->|"Summarize/Extract"| LiteLLM
+    RAGEngine -.->|"Embeddings"| Gemini
+    RAGEngine -.->|"Grounded answer"| LiteLLM
     JobManager -->|"Status/Results"| Neon
     RAGEngine <-->|"Vector Chunks"| Neon
 ```
@@ -89,10 +122,10 @@ flowchart TD
 
 ## ✨ Features
 
-- **Multi-Source Input:** Process public YouTube videos or directly upload audio/video files.
-- **Dual-Language Transcription:** Support for English (via Groq Whisper) and Hinglish (via Sarvam AI).
+- **Static sample:** Explore prepared findings and cited answers without waking the backend.
+- **Live clip analysis:** Upload a short English audio or video file for transcription and analysis when live access is enabled.
 - **Automated Insights:** Automatically generates a suitable title, comprehensive summary, action items, key decisions, and open questions.
-- **Interactive RAG Chat:** Chat directly with the context of your meeting/video using Mistral AI.
+- **Hybrid RAG chat:** Ask about a recording and see citations with source time ranges.
 - **Isolated Jobs:** Every job receives isolated processing and isolated vector storage to prevent context contamination.
 
 ---
@@ -101,8 +134,8 @@ flowchart TD
 
 ### Backend
 - **Framework:** FastAPI, Uvicorn
-- **Audio Processing:** yt-dlp, ffmpeg (single streaming pass decodes + chunks at flat memory, so long files fit the 512MB free tier), pydub
-- **AI/LLM:** LangChain LCEL, Mistral AI (LLM & Embeddings), Groq (STT), Sarvam (STT)
+- **Audio Processing:** yt-dlp, streaming FFmpeg, pydub
+- **AI/LLM:** LangChain LCEL, LiteLLM, Gemini embeddings, Groq and optional Sarvam STT, BM25, FlashRank and ONNX Runtime
 - **Database & Vectors:** Neon (Serverless Postgres), pgvector, SQLAlchemy
 
 ### Frontend
@@ -114,11 +147,7 @@ flowchart TD
 
 ## ⚙️ Prerequisites
 
-Before you start, make sure you have the following API keys and services available:
-1. **Mistral API Key** - For embeddings and chat generation.
-2. **Groq API Key** - For lightning-fast English transcription (using Whisper).
-3. **Sarvam API Key** - For Hinglish speech-to-text.
-4. **Neon Postgres Database** - A connection string (`DATABASE_URL`) to a database with the `pgvector` extension enabled.
+Local offline tests need Python 3.11 and the backend lockfile. Running the API needs a PostgreSQL database with pgvector. Provider-backed processing additionally needs prepared reranker assets and the explicitly verified free profiles described in the [operator guide](docs/HYBRID_IMPLEMENTATION.md).
 
 *Note: For the backend to process audio, `ffmpeg` must be installed on your system. Docker handles this natively.*
 
@@ -136,14 +165,13 @@ cp .env.example .env
 ```
 
 Ensure `.env` contains:
-- `MISTRAL_API_KEY`
-- `GROQ_API_KEY`
-- `SARVAM_API_KEY`
 - `DATABASE_URL`
+- `LLM_ROUTES_JSON`, `STT_PROFILES_JSON`, provider keys and Gemini embedding limits only after account verification
 - `FRONTEND_ORIGIN` (Optional for local dev, needed for production CORS)
-- `YT_DLP_COOKIES_PATH` (Optional, path to cookies to mitigate YouTube rate-limiting)
-- `MAX_UPLOAD_MB` (Optional, default `200` — uploads over this get a clean `413`)
-- `HF_TOKEN` (Optional — silences the "unauthenticated requests to the HF Hub" warning from the embeddings tokenizer download)
+- `MAX_UPLOAD_MB` (optional, defaults to `10`; the recruiter demo ceiling is 10 MiB)
+- `ENABLE_PROVIDER_CALLS`, `RATE_LIMIT_SECRET`, and the quota controls documented above (see `.env.example`)
+- `DEMO_LIVE_MODE` (defaults to `sample`), `JOB_TOKEN_SECRET` for live mode, and `DEMO_INVITE_CODE` for invited mode
+- `MAX_MEDIA_SECONDS` (optional, defaults to `120`; the recruiter demo ceiling is two minutes)
 - `ADMIN_TOKEN` (Optional — enables the token-gated `/admin/cleanup` endpoint; unset means the endpoint stays disabled)
 
 ### 2. Backend Setup (Docker recommended)
@@ -161,9 +189,10 @@ docker run -p 8000:8000 --env-file .env ai-video-backend
 *Alternatively, run natively (from the repo root — the backend is a package, so
 `backend.api` is the correct import path):*
 ```bash
-pip install -r backend/requirements.txt
+pip install -r backend/requirements.lock
+python scripts/prepare_reranker.py
 # Ensure ffmpeg is installed via your OS package manager (e.g. brew install ffmpeg)
-uvicorn backend.api:app --host 0.0.0.0 --port 8000 --reload
+uvicorn backend.api:app --host 0.0.0.0 --port 8000 --reload --no-access-log
 ```
 
 ### 3. Frontend Setup
@@ -177,8 +206,7 @@ npm run dev
 ```
 
 The dev server runs at `http://localhost:5173`. It proxies API calls to the
-backend and, by default, targets the deployed Render backend — so it works out
-of the box. To point it at a different backend (e.g. a local one at
+backend and, by default, targets the local backend. To point it at a different backend (e.g. another one at
 `http://localhost:8000`), set `VITE_BACKEND_URL` in `web/.env` (see
 `web/.env.example`). The Vite dev proxy routes browser requests through the dev
 server, so local development never trips the backend's CORS allow-list.
@@ -187,63 +215,38 @@ server, so local development never trips the backend's CORS allow-list.
 
 ## ☁️ Deployment Strategy
 
-This architecture is optimized for free-tier cloud deployment:
+The 512 MiB Linux container benchmark and provider account checks gate deployment. See the [benchmark notes](docs/BENCHMARK_NOTES.md).
 
-- **Backend:** Deploy the FastAPI app using the provided `Dockerfile` to a service like **Render** or Railway. The long-running nature of processing videos utilizes asynchronous background tasks to prevent HTTP timeouts.
+- **Backend:** The existing **Render Free** service runs FastAPI using the provided `Dockerfile`. It processes uploads in background tasks after admission.
 - **Frontend:** Deploy the `web/` React app to **Vercel** — import the repo, set **Root Directory** to `web` (framework auto-detects as Vite), and add **`VITE_BACKEND_URL`** = the backend URL. Then add the resulting Vercel origin to the backend's `FRONTEND_ORIGIN` (comma-separated, **no trailing slash**) so CORS admits it.
 - **Database:** **Neon** Serverless Postgres perfectly handles the relational states and vector storage via `pgvector`.
-- **Scheduled cleanup:** A GitHub Actions workflow (`.github/workflows/cleanup.yml`) calls `POST /admin/cleanup?older_than_days=15` daily to purge old jobs and their vector collections. It authenticates with an `ADMIN_TOKEN` repo secret that must match the backend's `ADMIN_TOKEN` env var. Set both to the same value; adjust the retention window or `cron` schedule in the workflow as needed.
+- **Scheduled cleanup:** A GitHub Actions workflow (`.github/workflows/cleanup.yml`) calls `POST /admin/cleanup?older_than_days=1` daily. Its `ADMIN_TOKEN` repository secret must match the backend secret.
 
 ---
 
 ## 🗑️ Data Lifecycle
 
-Transcripts, summaries, findings, and vectors for a job live in Neon only until the job is released. A job is deleted (`DELETE /jobs/{id}` → job row + its `pgvector` collection) in three ways:
+Job transcripts, summaries, findings, and vectors live in Neon until explicit deletion or scheduled cleanup.
 
-- **New session / reset** in the UI.
-- **Tab close or refresh** — a `pagehide` handler fires a `keepalive` `DELETE` so a session never orphans its data.
-- **The scheduled cron** (above), which sweeps anything older than 15 days that slipped through — e.g. a browser killed before the unload request flushed.
+- **Delete session** removes the job and its vector collection. Closing or refreshing the tab leaves the job available.
+- **Scheduled cleanup** sweeps eligible terminal jobs 24 hours after their last update. It skips jobs with active work.
 
 To purge on demand, call the endpoint directly (never commit the token or paste it in chat):
 
 ```bash
-curl -X POST "https://<backend-url>/admin/cleanup?older_than_days=15" \
+curl -X POST "https://<backend-url>/admin/cleanup?older_than_days=1" \
   -H "X-Admin-Token: $ADMIN_TOKEN"
-# → {"deleted": N, "older_than_days": 15}
+# → {"deleted": N, "older_than_days": 1}
 ```
 
-`older_than_days=0` purges everything. Returns `503` if `ADMIN_TOKEN` is unset, `401` on a bad token.
+`older_than_days=0` purges eligible inactive jobs; active work is excluded. Returns `503` if `ADMIN_TOKEN` is unset, `401` on a bad token.
 
 ---
 
 ## ⚠️ Known Limitations & Notes
 
-### YouTube URLs do not work on the hosted demo (they work locally)
-
-YouTube serves a **"Sign in to confirm you're not a bot"** challenge to requests coming from cloud and
-datacenter IP ranges. Render runs on exactly such a range, so the YouTube path fails on the deployed
-backend. **Run this project on your own machine and YouTube works fine**, because a home connection
-has a residential IP that YouTube trusts.
-
-This is a restriction on YouTube's side, not a defect in the pipeline. The UI states this plainly on
-the YouTube input, and the backend translates yt-dlp's bot-check error into a readable explanation
-rather than a traceback.
-
-The workarounds were all evaluated and deliberately not taken for a free-tier demo:
-
-| Workaround | Why not |
-|---|---|
-| Residential proxy (Bright Data, IPRoyal, …) | Works reliably, but costs money per GB. |
-| Exported `cookies.txt` from a throwaway account | Free, but cookies expire within days and datacenter IPs still get challenged. Supported anyway — set `YT_DLP_COOKIES_PATH`. |
-| [PO token provider (bgutil)](https://github.com/Brainicism/bgutil-ytdlp-pot-provider) | Makes traffic look more legitimate; its own docs note it does not guarantee a bypass. |
-| Cloudflare WARP tunnel | Effective, but needs `NET_ADMIN` container privileges that Render's free tier does not grant. |
-
-**File upload is the supported path on the demo** and works end to end.
-
-### Other notes
-
 - **Cold starts:** Render's free tier sleeps the backend after 15 minutes idle; the first request afterwards takes up to ~60s. The frontend surfaces this as a "waking up" message rather than an error.
 - **Memory:** Audio is decoded and chunked in a single streaming `ffmpeg` pass (`-vn -ac 1 -ar 16000 -f segment`), so memory stays flat regardless of length. This replaced an in-memory `pydub` path that loaded the whole file's PCM into RAM twice and exceeded Render's 512MB limit on long uploads.
-- **Upload cap:** Uploads are capped at `MAX_UPLOAD_MB` (default 200). The backend streams the upload to disk in bounded reads and returns a clean `413` when exceeded; the frontend blocks oversized files before upload.
+- **Upload cap:** A request-body limit runs before multipart parsing with bounded overhead. The route also verifies the file size and duration. The frontend blocks files above 10 MiB before upload.
 - **Ephemeral Storage:** Audio files are heavily chunked to fit API payload limits (e.g., Groq's 25MB cap) and are immediately deleted post-transcription. No raw audio is persistently stored.
 - **CORS:** `FRONTEND_ORIGIN` must be the exact origin with **no trailing slash** — browsers never send one, so a trailing slash silently blocks every request.

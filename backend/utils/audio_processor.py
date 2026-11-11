@@ -1,13 +1,14 @@
 import glob
+import math
 import os
 import shutil
 import subprocess
 import tempfile
+from urllib.parse import parse_qs, urlsplit
 
 import yt_dlp
 
-DOWNLOAD_DIR = 'downloades'
-os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+from ..core.telemetry import duration, local_size, metric
 
 # Groq rejects uploads over 25MB. At 16kHz mono 16-bit (32 KB/s), a 5-minute
 # chunk is ~9.6MB, which leaves comfortable headroom.
@@ -16,27 +17,11 @@ CHUNK_MINUTES = 5
 # The ffmpeg binary. It ships in the Docker image (see Dockerfile) and pydub/yt-dlp
 # already rely on it; resolve from PATH with a plain-name fallback.
 FFMPEG = shutil.which("ffmpeg") or "ffmpeg"
-
-
-def _cookie_opts() -> dict:
-    """
-    yt-dlp will use a browser-exported cookies.txt if one is configured and present.
-    This only reduces datacenter-IP blocking — it does not eliminate it. Downloads
-    from Render will still fail intermittently with "Sign in to confirm you're not
-    a bot". That is expected on a free datacenter IP, not a bug to chase.
-    """
-    path = os.getenv("YT_DLP_COOKIES_PATH")
-    if path and os.path.exists(path):
-        return {"cookiefile": path}
-    return {}
+FFPROBE = shutil.which("ffprobe") or "ffprobe"
 
 
 BOT_CHECK_MESSAGE = (
-    "YouTube blocked this download. It serves a \"Sign in to confirm you're not a bot\" "
-    "challenge to cloud/datacenter IP ranges, which is what the hosted backend runs on. "
-    "This is a restriction on YouTube's side, not a fault in the pipeline — the same URL "
-    "downloads fine when the backend runs on a home/residential connection. "
-    "Upload the audio or video file directly instead."
+    "YouTube blocked this download. Upload an audio or video file you have permission to use."
 )
 
 
@@ -45,32 +30,76 @@ def _is_bot_check(err: Exception) -> bool:
     return "confirm you" in text and "bot" in text
 
 
-def download_youtube_audio(url :str) ->str:
-    output_path = os.path.join(DOWNLOAD_DIR, "%(title)s.%(ext)s")
-    ydl_opts = {
-        "format": "bestaudio/best",
-        "outtmpl": output_path,
-        "postprocessors": [
-            {
-                "key": "FFmpegExtractAudio",
-                "preferredcodec": "wav",
-                "preferredquality": "192",
-            }
-        ],
-        "quiet": True,
-        **_cookie_opts(),
+class MediaValidationError(ValueError):
+    """Safe media validation message for users."""
+
+
+def _max_seconds() -> float:
+    value = float(os.getenv("MAX_MEDIA_SECONDS", "").strip() or "600")
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError("MAX_MEDIA_SECONDS must be finite and positive.")
+    return min(value, 120)
+
+
+def _validate_duration(value) -> None:
+    try:
+        duration = float(value)
+    except (TypeError, ValueError):
+        raise MediaValidationError("Media duration is unknown.") from None
+    if not math.isfinite(duration) or duration <= 0 or duration > _max_seconds():
+        raise MediaValidationError("Media duration is invalid or exceeds the limit.")
+
+
+def validate_youtube_url(url: str) -> str:
+    parts = urlsplit(url)
+    if (parts.scheme != "https" or parts.netloc not in
+            {"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"}):
+        raise ValueError("Only HTTPS YouTube URLs are supported.")
+    if parts.path == "/playlist" or "list" in parse_qs(parts.query, keep_blank_values=True):
+        raise ValueError("Playlists are not supported.")
+    if os.getenv("ENABLE_YOUTUBE", "false").lower() != "true":
+        raise ValueError("YouTube downloads are disabled.")
+    return url
+
+
+def download_youtube_audio(url: str) -> str:
+    validate_youtube_url(url)
+    max_bytes = int(os.getenv("MAX_DOWNLOAD_MB", "").strip() or "25") * 1024 * 1024
+    if max_bytes <= 0:
+        raise ValueError("MAX_DOWNLOAD_MB must be positive.")
+    directory = tempfile.mkdtemp(prefix="avassist_download_")
+
+    def limit_download(status):
+        if (status.get("downloaded_bytes") or 0) > max_bytes:
+            raise MediaValidationError("Download exceeds the size limit.")
+
+    opts = {
+        "format": "bestaudio[protocol=https]/bestaudio[protocol=http]/best[protocol=https]/best[protocol=http]", "outtmpl": os.path.join(directory, "%(id)s.%(ext)s"),
+        "quiet": True, "noplaylist": True, "max_filesize": max_bytes,
+        "socket_timeout": 15, "retries": 0, "fragment_retries": 0,
+        "progress_hooks": [limit_download],
     }
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info).replace(".webm", ".wav").replace(".m4a", ".wav")
-    except yt_dlp.utils.DownloadError as err:
-        # Surface the bot check as a plain explanation rather than a yt-dlp traceback;
-        # the job's error field is rendered verbatim in the UI.
-        if _is_bot_check(err):
-            raise RuntimeError(BOT_CHECK_MESSAGE) from err
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            if not info or info.get("_type") in ("playlist", "multi_video") or info.get("is_live") or info.get("live_status") in ("is_live", "is_upcoming"):
+                raise MediaValidationError("Playlists and live streams are not supported.")
+            _validate_duration(info.get("duration"))
+            if (info.get("filesize") or info.get("filesize_approx") or 0) > max_bytes:
+                raise MediaValidationError("Download exceeds the size limit.")
+            info = ydl.process_ie_result(info, download=True)
+            downloads = info.get("requested_downloads") or []
+            filename = downloads[0].get("filepath") if downloads else None
+            filename = filename or ydl.prepare_filename(info)
+            if (os.path.commonpath([directory, os.path.realpath(filename)]) != directory
+                    or not os.path.isfile(filename) or os.path.getsize(filename) > max_bytes):
+                raise MediaValidationError("Downloaded media is missing or exceeds the size limit.")
+            return filename
+    except Exception as err:
+        cleanup([directory])
+        if isinstance(err, yt_dlp.utils.DownloadError) and _is_bot_check(err):
+            raise MediaValidationError(BOT_CHECK_MESSAGE) from None
         raise
-    return filename
 
 
 def chunk_streaming(raw_path: str, chunk_minutes: int = CHUNK_MINUTES) -> tuple[list, str]:
@@ -83,12 +112,21 @@ def chunk_streaming(raw_path: str, chunk_minutes: int = CHUNK_MINUTES) -> tuple[
     from_wav), which loaded the entire decoded PCM into RAM twice and blew past
     Render's 512MB free tier on long recordings.
     """
+    raw_path = os.path.abspath(raw_path)
+    probe = subprocess.run(
+        [FFPROBE, "-v", "error", "-protocol_whitelist", "file,pipe", "-show_entries",
+         "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", raw_path],
+        check=True, capture_output=True, timeout=30, stdin=subprocess.DEVNULL,
+    )
+    _validate_duration(probe.stdout.decode("utf-8", "replace").strip())
     chunk_dir = tempfile.mkdtemp(prefix="avassist_chunks_")
     pattern = os.path.join(chunk_dir, "chunk_%03d.wav")
 
     cmd = [
-        FFMPEG, "-y",
+        FFMPEG, "-v", "error", "-nostats", "-y",
+        "-protocol_whitelist", "file,pipe",
         "-i", raw_path,
+        "-t", str(_max_seconds()),
         "-vn",                       # drop any video stream — only the audio track matters
         "-ac", "1",                  # mono
         "-ar", "16000",              # 16kHz — all Whisper/Sarvam consume
@@ -99,17 +137,21 @@ def chunk_streaming(raw_path: str, chunk_minutes: int = CHUNK_MINUTES) -> tuple[
     ]
 
     try:
-        subprocess.run(cmd, check=True, capture_output=True)
+        subprocess.run(cmd, check=True, capture_output=True, timeout=max(60, _max_seconds() * 2), stdin=subprocess.DEVNULL)
     except subprocess.CalledProcessError as err:
-        shutil.rmtree(chunk_dir, ignore_errors=True)
+        cleanup([chunk_dir])
         stderr = (err.stderr or b"").decode("utf-8", "replace").strip()
         tail = stderr.splitlines()[-1] if stderr else "unknown ffmpeg error"
         raise RuntimeError(f"Audio conversion failed: {tail}") from err
 
+    except Exception:
+        cleanup([chunk_dir])
+        raise
+
     chunks = sorted(glob.glob(os.path.join(chunk_dir, "chunk_*.wav")))
     if not chunks:
-        shutil.rmtree(chunk_dir, ignore_errors=True)
-        raise RuntimeError("No audio was found in the uploaded file.")
+        cleanup([chunk_dir])
+        raise MediaValidationError("No audio was found in the uploaded file.")
     return chunks, chunk_dir
 
 
@@ -120,22 +162,27 @@ def process_input(source: str) -> tuple[list, list]:
     is never persisted anywhere.
     """
     artifacts = []
-
-    if source.startswith("http://") or source.startswith("https://"):
-        print("Detected YouTube URL. Downloading audio...")
-        raw_path = download_youtube_audio(source)
-        artifacts.append(raw_path)
-    else:
-        print("Detected local file.")
-        raw_path = source
-
-    # Single streaming pass: decode to 16kHz mono and segment into chunks at once.
-    print("Converting to 16kHz mono WAV and chunking...")
-    chunks, chunk_dir = chunk_streaming(raw_path)
-    artifacts.extend(chunks)
-    artifacts.append(chunk_dir)
-    print(f"Audio ready — {len(chunks)} chunk(s) created.")
-    return chunks, artifacts
+    try:
+        if "://" in source:
+            with duration("youtube_download"):
+                raw_path = download_youtube_audio(source)
+            artifacts.append(os.path.dirname(raw_path))
+        else:
+            raw_path = source
+        size = local_size([raw_path])
+        if size is not None:
+            metric("input", local_file_bytes=size)
+        with duration("audio_conversion"):
+            chunks, chunk_dir = chunk_streaming(raw_path)
+        artifacts.extend(chunks)
+        artifacts.append(chunk_dir)
+        size = local_size(chunks)
+        if size is not None:
+            metric("decoded_audio", wav_file_bytes=size, audio_chunks=len(chunks))
+        return chunks, artifacts
+    except Exception:
+        cleanup(artifacts)
+        raise
 
 
 def cleanup(artifacts: list) -> None:
@@ -145,8 +192,10 @@ def cleanup(artifacts: list) -> None:
             if not path or not os.path.exists(path):
                 continue
             if os.path.isdir(path):
-                shutil.rmtree(path, ignore_errors=True)
+                shutil.rmtree(path)
             else:
                 os.remove(path)
-        except OSError as e:
-            print(f"Could not remove {path}: {e}")
+        except FileNotFoundError:
+            continue
+        except OSError:
+            metric("audio_cleanup", status="failed")

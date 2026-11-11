@@ -1,0 +1,23 @@
+<!doctype html><title>Isolated audio benchmark</title><pre id="result">Starting</pre><script type="module">
+import { FFmpeg } from '/ffmpeg/dist/esm/index.js';
+const log = document.querySelector('#result');
+const results = {userAgent:navigator.userAgent};
+try {
+ const f = new FFmpeg(); let t=performance.now();
+ await f.load({coreURL:'/core/dist/esm/ffmpeg-core.js',wasmURL:'/core/dist/esm/ffmpeg-core.wasm'});
+ results.loadMs=performance.now()-t; results.files=[];
+ for (const seconds of [30,120,600]) {
+  const bytes = new Uint8Array(await (await fetch(`/${seconds}.mp4`)).arrayBuffer());
+  const inputBytes = bytes.length;
+  t=performance.now(); await f.writeFile('input.mp4',bytes); const copyMs=performance.now()-t;
+  t=performance.now(); const code=await f.exec(['-i','input.mp4','-vn','-ac','1','-ar','16000','-c:a','libmp3lame','-b:a','48k','output.mp3']); const extractMs=performance.now()-t;
+  if(code!==0) throw Error(`ffmpeg exit ${code}`);
+  const out=await f.readFile('output.mp3');
+  results.files.push({seconds,inputBytes,outputBytes:out.length,copyMs,extractMs});
+  await f.deleteFile('input.mp4'); await f.deleteFile('output.mp3');
+  log.textContent=JSON.stringify(results,null,2);
+ }
+ f.terminate(); results.done=true;
+} catch(e){results.error=String(e)}
+log.textContent=JSON.stringify(results,null,2);
+</script>

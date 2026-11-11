@@ -1,231 +1,345 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Overlays from './components/Overlays';
-import Nav from './components/Nav';
-import Preloader from './components/Preloader';
+import DemoSample from './components/DemoSample';
 import Empty from './components/Empty';
 import Processing from './components/Processing';
 import Results from './components/Results';
-import { SANS, MONO, CREAM, SUBTLE, MUTE, DIM, STEP_ORDER } from './lib/theme';
-import { startJob, getStatus, getResult, askChat, releaseJob, releaseJobOnUnload, BackendError } from './api';
-import { sleep } from './lib/parse';
+import { STEP_ORDER } from './lib/theme';
+import { startJob, getDemoMode, getStatus, getResult, askChat, releaseJob } from './api';
+
+const SESSION_KEY = 'minutes.live-session';
+const POLL_WINDOW = 5 * 60 * 1000;
+const READ_TIMEOUT = 20 * 1000;
+
+function savedSession() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(SESSION_KEY));
+    if (typeof value?.id === 'string' && value.id && typeof value.token === 'string' && value.token) {
+      return { id: value.id, token: value.token };
+    }
+  } catch {
+    // The app can continue in memory when storage is unavailable.
+  }
+  return null;
+}
+
+function saveSession(session) {
+  try {
+    if (session) sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    else sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    // The active page can still use an in-memory session.
+  }
+}
+
+const expired = (error) => error.status === 404 || error.status === 410;
+const retryable = (error) => !error.status || error.status === 429 || error.status >= 500;
+const EXPIRED_NOTICE = 'This live session has expired or is no longer available.';
 
 export default function App() {
-  const [phase, setPhase] = useState('boot'); // boot | empty | processing | ready | error
-  const [job, setJob] = useState(null); // { id, fileName, fileSize, language }
+  const [session, setSession] = useState(savedSession);
+  const [view, setView] = useState(() => session && window.history.state?.resumeLiveDemo ? 'session' : 'sample');
+  const [mode, setMode] = useState('loading');
+  const [modeAttempt, setModeAttempt] = useState(0);
+  const [meta, setMeta] = useState({ language: 'english' });
+  const [phase, setPhase] = useState('processing');
   const [stageIdx, setStageIdx] = useState(-1);
   const [result, setResult] = useState(null);
   const [chat, setChat] = useState([]);
-  const [errorMsg, setErrorMsg] = useState('');
+  const [notice, setNotice] = useState('');
+  const [uploadError, setUploadError] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [pollNotice, setPollNotice] = useState('');
+  const [checking, setChecking] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const writes = useRef({ upload: false, chat: false, deletion: false });
+  const pollTiming = useRef({ start: 0, retryAt: 0 });
+  const checkStatus = useRef(null);
 
-  // A run token: incremented on each analyse/reset so a stale poll loop from a
-  // previous run stops touching state once the user has moved on.
-  const runRef = useRef(0);
-
-  // Track the active job id in a ref so the unload handler (registered once) can
-  // read the current value without re-binding. On tab close / refresh we release
-  // the job so its DB row + vectors don't orphan in Neon — the "New session"
-  // button already handles the in-app case.
-  const jobIdRef = useRef(null);
   useEffect(() => {
-    jobIdRef.current = job?.id ?? null;
-  }, [job]);
-  useEffect(() => {
-    const handler = () => releaseJobOnUnload(jobIdRef.current);
-    window.addEventListener('pagehide', handler);
-    return () => window.removeEventListener('pagehide', handler);
-  }, []);
+    window.history.replaceState({
+      ...window.history.state,
+      resumeLiveDemo: view === 'session' && Boolean(session),
+    }, '');
+  }, [view, session]);
 
-  const poll = useCallback(async (jobId, runId) => {
-    while (runRef.current === runId) {
-      const s = await getStatus(jobId);
-      if (runRef.current !== runId) return;
-      if (s.status === 'error') throw new BackendError(s.error || 'Processing failed.');
-      if (s.status === 'done') break;
-      const idx = STEP_ORDER.indexOf(s.step);
-      if (idx >= 0) setStageIdx(idx);
-      await sleep(3000);
-    }
-    if (runRef.current !== runId) return;
-    setStageIdx(6);
-    const r = await getResult(jobId);
-    if (runRef.current !== runId) return;
-    setResult(r);
-    setPhase('ready');
-  }, []);
+  const openView = (nextView) => {
+    if (nextView === 'live' && view !== 'live' && !session) setMode('loading');
+    setView(nextView);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  };
 
-  const analyse = useCallback(
-    async ({ file, youtubeUrl, language }) => {
-      const runId = (runRef.current += 1);
-      const meta = {
-        fileName: file ? file.name : youtubeUrl,
-        fileSize: file ? file.size : null,
-        language,
-      };
-      setErrorMsg('');
-      setResult(null);
-      setChat([]);
-      setStageIdx(0);
-      setJob({ id: null, ...meta });
-      setPhase('processing');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      try {
-        const { job_id: jobId } = await startJob({ file, youtubeUrl, language });
-        if (runRef.current !== runId) return;
-        setJob({ id: jobId, ...meta });
-        await poll(jobId, runId);
-      } catch (e) {
-        if (runRef.current !== runId) return;
-        setErrorMsg(e instanceof BackendError ? e.message : String(e));
-        setPhase('error');
-      }
-    },
-    [poll],
-  );
-
-  const ask = useCallback(
-    async (question) => {
-      if (!job?.id) return;
-      const id = `${Date.now()}-${Math.random()}`;
-      setChat((c) => [...c, { id, q: question, a: '', pending: true }]);
-      try {
-        const { answer } = await askChat(job.id, question);
-        setChat((c) => c.map((m) => (m.id === id ? { ...m, a: answer, pending: false } : m)));
-      } catch (e) {
-        const msg = e instanceof BackendError ? e.message : String(e);
-        setChat((c) => c.map((m) => (m.id === id ? { ...m, a: `⚠ ${msg}`, pending: false } : m)));
-      }
-    },
-    [job],
-  );
-
-  const reset = useCallback(async () => {
-    runRef.current += 1; // stop any in-flight poll
-    const id = job?.id;
-    setPhase('empty');
-    setJob(null);
+  const clearSession = useCallback((message) => {
+    saveSession(null);
+    setSession(null);
     setResult(null);
     setChat([]);
     setStageIdx(-1);
-    setErrorMsg('');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    if (id) {
-      try {
-        await releaseJob(id);
-      } catch {
-        /* best-effort release */
-      }
-    }
-  }, [job]);
+    setPhase('processing');
+    setDeleteError('');
+    setPollNotice('');
+    pollTiming.current = { start: 0, retryAt: 0 };
+    setNotice(message);
+    setView((current) => current === 'session' ? 'live' : current);
+  }, []);
 
-  const navStatus =
-    phase === 'processing' ? 'Processing…' : phase === 'ready' ? 'Session active' : 'No active session';
+  useEffect(() => {
+    if (view !== 'live' || session) return;
+    const controller = new AbortController();
+    setMode('loading');
+    getDemoMode(controller.signal).then(({ mode: availableMode }) => {
+      if (controller.signal.aborted) return;
+      setMode(['sample', 'invited', 'public'].includes(availableMode) ? availableMode : 'unavailable');
+    }).catch(() => {
+      if (!controller.signal.aborted) setMode('unavailable');
+    });
+    return () => controller.abort();
+  }, [view, session, modeAttempt]);
+
+  useEffect(() => {
+    if (view !== 'session' || !session || phase !== 'processing' || deleting) return;
+    const timing = pollTiming.current;
+    timing.start ||= Date.now();
+    const deadline = timing.start + POLL_WINDOW;
+    let controller;
+    let timeout;
+    let disposed = false;
+    let pausedRequest;
+    let recheck = false;
+    setChecking(false);
+
+    const schedule = () => {
+      if (disposed || document.hidden) return;
+      const now = Date.now();
+      const cadence = now - timing.start < 30000 ? 3000 : 5000;
+      const next = Math.max(now + cadence, timing.retryAt);
+      clearTimeout(timeout);
+      if (next >= deadline) {
+        setPollNotice((message) => message
+          ? `${message} Automatic checks have paused.`
+          : 'Automatic checks have paused. Use Check status to try again.');
+        return;
+      }
+      timeout = setTimeout(() => read(), next - now);
+    };
+
+    const read = async (manual = false) => {
+      if (disposed || document.hidden || controller) return;
+      const remaining = deadline - Date.now();
+      if (!manual && remaining <= 0) {
+        setPollNotice('Automatic checks have paused. Use Check status to try again.');
+        return;
+      }
+      if (Date.now() < timing.retryAt) {
+        if (!manual) schedule();
+        else setPollNotice(`Try again in ${Math.ceil((timing.retryAt - Date.now()) / 1000)} seconds.`);
+        return;
+      }
+      clearTimeout(timeout);
+      const request = new AbortController();
+      controller = request;
+      const timer = setTimeout(() => request.abort(), manual ? READ_TIMEOUT : Math.min(READ_TIMEOUT, remaining));
+      setChecking(true);
+      let again = false;
+      try {
+        const status = await getStatus(session, request.signal);
+        if (disposed || request.signal.aborted) return;
+        if (status.status === 'done') {
+          const response = await getResult(session, request.signal);
+          if (disposed || request.signal.aborted) return;
+          setResult(response);
+          setPollNotice('');
+          setPhase('ready');
+        } else if (status.status === 'error' || status.status === 'interrupted') {
+          setPollNotice(status.error || 'The analysis stopped. Delete the session to start again.');
+          setPhase('error');
+        } else {
+          const index = STEP_ORDER.indexOf(status.step);
+          if (index >= 0) setStageIdx(index);
+          setPollNotice(manual && Date.now() >= deadline ? 'The clip is still processing. You can check again.' : '');
+          again = true;
+        }
+      } catch (error) {
+        if (disposed || document.hidden || pausedRequest === request) return;
+        if (expired(error)) clearSession(EXPIRED_NOTICE);
+        else if (retryable(error)) {
+          if (error.retryAfterMs) timing.retryAt = Date.now() + error.retryAfterMs;
+          setPollNotice(request.signal.aborted ? 'The status check timed out.' : error.message);
+          again = true;
+        } else {
+          setPollNotice(error.message);
+        }
+      } finally {
+        clearTimeout(timer);
+        controller = undefined;
+        if (!disposed) {
+          setChecking(false);
+          if (recheck) {
+            recheck = false;
+            read();
+          } else if (again && (!manual || Date.now() < deadline)) schedule();
+        }
+      }
+    };
+
+    const onVisibility = () => {
+      clearTimeout(timeout);
+      if (document.hidden) {
+        pausedRequest = controller;
+        controller?.abort();
+      } else if (controller === pausedRequest && controller) {
+        recheck = true;
+      } else {
+        read();
+      }
+    };
+
+    checkStatus.current = () => read(true);
+    document.addEventListener('visibilitychange', onVisibility);
+    read();
+    return () => {
+      disposed = true;
+      checkStatus.current = null;
+      clearTimeout(timeout);
+      controller?.abort();
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [view, session, phase, deleting, clearSession]);
+
+  const analyse = async ({ file, inviteCode }) => {
+    if (writes.current.upload || session || !['invited', 'public'].includes(mode)) return;
+    writes.current.upload = true;
+    setNotice('');
+    setUploadError('');
+    setSubmitting(true);
+    try {
+      const { job_id: id, job_token: token } = await startJob({ file, inviteCode });
+      if (typeof id !== 'string' || !id || typeof token !== 'string' || !token) {
+        throw new Error('The backend did not return a usable session.');
+      }
+      const created = { id, token };
+      saveSession(created);
+      setMeta({ fileName: file.name, fileSize: file.size, language: 'english' });
+      setSession(created);
+      setPhase('processing');
+      setView((current) => current === 'live' ? 'session' : current);
+    } catch (error) {
+      setUploadError(error.message);
+    } finally {
+      writes.current.upload = false;
+      setSubmitting(false);
+    }
+  };
+
+  const ask = async (question) => {
+    if (!session || writes.current.chat || writes.current.deletion) return;
+    writes.current.chat = true;
+    const id = Date.now();
+    setChat((messages) => [...messages, { id, q: question, a: '', pending: true }]);
+    try {
+      const response = await askChat(session, question);
+      setChat((messages) => messages.map((message) => message.id === id
+        ? { ...message, a: response.answer, citations: response.citations, model: response.model, retrieval: response.retrieval, pending: false }
+        : message));
+    } catch (error) {
+      if (expired(error)) clearSession(EXPIRED_NOTICE);
+      else setChat((messages) => messages.map((message) => message.id === id
+        ? { ...message, a: error.message, pending: false }
+        : message));
+    } finally {
+      writes.current.chat = false;
+    }
+  };
+
+  const remove = async () => {
+    if (!session || writes.current.deletion || writes.current.chat) return;
+    writes.current.deletion = true;
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      const response = await releaseJob(session);
+      if (response.deleted !== true) throw new Error('The backend did not confirm deletion.');
+      clearSession('Live session deleted.');
+    } catch (error) {
+      if (expired(error)) clearSession(EXPIRED_NOTICE);
+      else setDeleteError(`Could not delete the live session. ${error.message} Your session is still available in this tab.`);
+    } finally {
+      writes.current.deletion = false;
+      setDeleting(false);
+    }
+  };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', overflowX: 'clip' }}>
-      <Overlays />
-      {phase === 'boot' && <Preloader onDone={() => setPhase('empty')} />}
-      <Nav
-        status={navStatus}
-        dotActive={phase === 'ready'}
-        dotPulse={phase === 'processing'}
-        showReset={phase === 'ready' || phase === 'error'}
-        onReset={reset}
-      />
-
-      <main style={{ flex: 1, position: 'relative', zIndex: 4, paddingTop: 90 }}>
-        {phase === 'empty' && <Empty onAnalyse={analyse} />}
-        {phase === 'processing' && <Processing fileName={job?.fileName} stageIdx={stageIdx} />}
-        {phase === 'ready' && result && (
-          <Results result={result} meta={job} chat={chat} onAsk={ask} />
-        )}
-        {phase === 'error' && (
-          <section
-            style={{
-              minHeight: 'calc(100vh - 260px)',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center',
-              padding: '8vh 44px',
-              maxWidth: 760,
-              margin: '0 auto',
-            }}
-          >
-            <div style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.08em', color: MUTE, marginBottom: 24 }}>
-              Something interrupted the run
-            </div>
-            <h1
-              style={{
-                margin: '0 0 28px',
-                fontFamily: SANS,
-                fontWeight: 500,
-                fontSize: 'clamp(34px,5vw,64px)',
-                lineHeight: 1.05,
-                letterSpacing: '-0.03em',
-              }}
-            >
-              It didn’t go through.
-            </h1>
-            <p style={{ margin: '0 0 40px', fontSize: 15, lineHeight: 1.75, color: SUBTLE }}>{errorMsg}</p>
-            <button
-              data-hov="1"
-              data-mag="1"
-              onClick={reset}
-              style={{
-                alignSelf: 'flex-start',
-                background: CREAM,
-                color: '#0e0e0d',
-                border: '1.5px solid #e8e5de',
-                fontFamily: MONO,
-                fontSize: 12,
-                letterSpacing: '0.06em',
-                padding: '18px 40px',
-                borderRadius: 14,
-                boxShadow: '6px 6px 0 rgba(232,229,222,0.25)',
-                transition: 'transform .3s cubic-bezier(.22,1,.36,1), box-shadow .2s',
-              }}
-            >
-              Start over&nbsp;&nbsp;→
-            </button>
+    <>
+      <header className="demo-header">
+        <span className="demo-brand">Minutes</span>
+        <nav aria-label="Demo paths" className="demo-paths">
+          <button type="button" className="demo-button" aria-pressed={view === 'sample'}
+            onClick={() => openView('sample')}>Explore a sample</button>
+          <button type="button" className="demo-button" aria-pressed={view === 'live' || view === 'session'}
+            onClick={() => view !== 'session' && openView('live')}>Analyze your own clip</button>
+        </nav>
+      </header>
+      <main>
+        {view === 'home' && (
+          <section className="demo-panel">
+            <h1>Video and meeting analysis</h1>
+            <p>Read a summary and ask questions with timestamp citations.</p>
           </section>
         )}
-      </main>
-
-      <footer style={{ borderTop: '1px solid rgba(232,229,222,0.10)', position: 'relative', zIndex: 4 }}>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            padding: '22px 44px',
-            fontFamily: MONO,
-            fontSize: 10,
-            letterSpacing: '0.2em',
-            color: DIM,
-            flexWrap: 'wrap',
-            gap: 12,
-          }}
-        >
-          <span>© 2026 Minutes</span>
-          <span>Upload · transcribe · ask</span>
-          <span>Every word, remembered</span>
-        </div>
-        <div style={{ overflow: 'hidden', padding: '0 32px' }}>
-          <div
-            style={{
-              fontFamily: SANS,
-              fontWeight: 300,
-              fontSize: 'clamp(100px,17vw,280px)',
-              lineHeight: 0.72,
-              letterSpacing: '-0.04em',
-              color: 'rgba(232,229,222,0.92)',
-              transform: 'translateY(14%)',
-              whiteSpace: 'nowrap',
-              textAlign: 'center',
-            }}
-          >
-            Minutes
+        {(view === 'home' || view === 'sample' || view === 'live') && session && (
+          <div className="demo-panel demo-resume">
+            <button className="demo-button" onClick={() => { setPhase('processing'); openView('session'); }}>Resume live session</button>
           </div>
-        </div>
-      </footer>
-    </div>
+        )}
+        {view === 'sample' && <DemoSample onBack={() => openView('home')} />}
+        {notice && <p className="demo-panel demo-feedback" role="status">{notice}</p>}
+        {view === 'live' && !session && (
+          <>
+            {mode === 'loading' && <p className="demo-panel" role="status">Checking live availability. The backend may be waking up.</p>}
+            {mode === 'sample' && (
+              <section className="demo-panel">
+                <h1>Live analysis is paused</h1>
+                <p>Explore the prepared sample for a summary, transcript, and timestamped answers.</p>
+                <button className="demo-button" onClick={() => openView('sample')}>Open sample</button>
+              </section>
+            )}
+            {mode === 'unavailable' && (
+              <section className="demo-panel">
+                <h1>Live analysis is unavailable</h1>
+                <p role="status">Could not check live availability. The sample is ready to explore.</p>
+                <button className="demo-button" onClick={() => setModeAttempt((attempt) => attempt + 1)}>Check availability</button>
+              </section>
+            )}
+            {(mode === 'invited' || mode === 'public') &&
+              <Empty mode={mode} submitting={submitting} onAnalyse={analyse} />}
+            {uploadError && <p className="demo-panel demo-feedback" role="alert">{uploadError}</p>}
+          </>
+        )}
+        {view === 'session' && session && (
+          <>
+            <section className="demo-panel demo-session" aria-label="Live session controls">
+              <div className="demo-paths">
+                {phase === 'processing' && (
+                  <button className="demo-button" disabled={checking || deleting} onClick={() => checkStatus.current?.()}>
+                    {checking ? 'Checking status…' : 'Check status'}
+                  </button>
+                )}
+                <button className="demo-button" disabled={deleting || chat.some((message) => message.pending)} onClick={remove}>
+                  {deleting ? 'Deleting session…' : 'Delete session'}
+                </button>
+              </div>
+              {deleteError && <p role="alert">{deleteError}</p>}
+              {pollNotice && <p role="status">{pollNotice}</p>}
+            </section>
+            {phase === 'processing' && <Processing fileName={meta.fileName || 'Live clip'} stageIdx={stageIdx} />}
+            {phase === 'ready' && result && (
+              <Results result={result} meta={meta} chat={chat} onAsk={ask} mode="live" economyOnly />
+            )}
+            {phase === 'error' && <h1 className="demo-panel">Analysis stopped</h1>}
+          </>
+        )}
+      </main>
+    </>
   );
 }
