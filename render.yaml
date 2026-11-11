@@ -1,15 +1,64 @@
 services:
   - type: web
-    name: ai-video-assistant-backend
+    name: ai-video-assistant-api-sg
     runtime: docker
     dockerfilePath: ./Dockerfile
     plan: free
+    region: singapore
+    autoDeployTrigger: "off"
     healthCheckPath: /health
     envVars:
       # Values are set in the Render dashboard — never committed here.
-      - key: MISTRAL_API_KEY
+      # Enable only after verifying free-only provider accounts and billing.
+      - key: ENABLE_PROVIDER_CALLS
+        value: "false"
+      - key: DEMO_LIVE_MODE
+        value: sample
+      - key: JOB_TOKEN_SECRET
         sync: false
+      - key: DEMO_INVITE_CODE
+        sync: false
+      - key: OWNER_EVALUATION_TOKEN
+        sync: false
+      - key: ENABLE_PAID_META
+        value: "false"
+      - key: MAX_UPLOAD_MB
+        value: "10"
+      - key: MAX_MEDIA_SECONDS
+        value: "120"
+      - key: JOBS_PER_IP_DAY
+        value: "1"
+      - key: JOBS_GLOBAL_DAY
+        value: "5"
+      - key: CHATS_PER_IP_MINUTE
+        value: "2"
+      - key: CHATS_PER_IP_DAY
+        value: "15"
+      - key: CHATS_PER_JOB_DAY
+        value: "3"
+      - key: CHATS_GLOBAL_DAY
+        value: "15"
+      - key: ENABLE_SARVAM
+        value: "false"
+      - key: ENABLE_YOUTUBE
+        value: "false"
+      - key: RATE_LIMIT_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: LLM_ROUTES_JSON
+        value: '[]'
+      - key: STT_PROFILES_JSON
+        value: '[]'
+      - key: ENABLE_GEMINI_EMBEDDINGS
+        value: "false"
       - key: GROQ_API_KEY
+        sync: false
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: META_API_KEY
         sync: false
       - key: SARVAM_API_KEY
         sync: false
@@ -17,5 +66,5 @@ services:
         sync: false
       - key: FRONTEND_ORIGIN
         sync: false
-      - key: YT_DLP_COOKIES_PATH
+      - key: ADMIN_TOKEN
         sync: false

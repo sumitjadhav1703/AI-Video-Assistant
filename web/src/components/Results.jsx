@@ -7,19 +7,19 @@ const CARD = {
   maxWidth: 1160,
   margin: '0 auto',
   display: 'grid',
-  gridTemplateColumns: 'minmax(140px,220px) 1fr',
+  gridTemplateColumns: 'var(--result-card-columns, minmax(140px,220px) 1fr)',
   gap: 32,
   border: '1.5px solid rgba(232,229,222,0.32)',
   background: 'rgba(232,229,222,0.025)',
   borderRadius: 18,
-  padding: '44px 48px',
+  padding: 'var(--result-card-padding, 44px 48px)',
   boxShadow: '8px 8px 0 rgba(232,229,222,0.10)',
 };
 const LABEL = { fontFamily: MONO, fontSize: 11, letterSpacing: '0.08em', color: MUTE };
 
 const TODAY = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 
-export default function Results({ result, meta, chat, onAsk }) {
+export default function Results({ result, meta, chat, onAsk, economyOnly, sampleMedia, presetQuestions, onSeek }) {
   const [transcriptOpen, setTranscriptOpen] = useState(false);
 
   // The backend emits a "No … found." placeholder string when the LLM extracts
@@ -43,10 +43,21 @@ export default function Results({ result, meta, chat, onAsk }) {
     meta.language === 'hinglish' ? 'Hinglish' : 'English',
   ].filter(Boolean);
 
+  const questions = (
+    <Chat
+      chat={chat}
+      onAsk={onAsk}
+      source={meta.fileName}
+      economyOnly={economyOnly}
+      presetQuestions={presetQuestions}
+      onSeek={onSeek}
+    />
+  );
+
   return (
     <article>
-      <section style={{ padding: '9vh 44px 60px', maxWidth: 1160, margin: '0 auto', position: 'relative' }}>
-        <div style={{ ...LABEL, marginBottom: 30, animation: 'fadeIn .6s ease both' }}>Session — {TODAY}</div>
+      <section style={{ padding: sampleMedia ? '24px var(--result-section-gutter) 36px' : '9vh 44px 60px', maxWidth: 1160, margin: '0 auto', position: 'relative' }}>
+        <div style={{ ...LABEL, marginBottom: 30, animation: 'fadeIn .6s ease both' }}>{sampleMedia ? 'Prepared sample' : `Session — ${TODAY}`}</div>
         <h1
           style={{
             margin: '0 0 34px',
@@ -80,10 +91,13 @@ export default function Results({ result, meta, chat, onAsk }) {
             </span>
           ))}
         </div>
+        {sampleMedia}
       </section>
 
+      {sampleMedia && questions}
+
       {/* Summary */}
-      <section style={{ borderTop: '1px solid rgba(232,229,222,0.10)', padding: '56px 44px 14px' }}>
+      <section style={{ borderTop: '1px solid rgba(232,229,222,0.10)', padding: '56px var(--result-section-gutter, 44px) 14px' }}>
         <div style={{ ...CARD, animation: 'fadeUp .9s cubic-bezier(.22,1,.36,1) .15s both' }}>
           <span style={LABEL}>Summary</span>
           <div style={{ maxWidth: 760 }}>
@@ -107,7 +121,7 @@ export default function Results({ result, meta, chat, onAsk }) {
 
       {/* Findings */}
       {groups.map((g, gi) => (
-        <section key={g.label} style={{ padding: '14px 44px' }}>
+        <section key={g.label} style={{ padding: '14px var(--result-section-gutter, 44px)' }}>
           <div style={{ ...CARD, animation: 'fadeUp .9s cubic-bezier(.22,1,.36,1) .25s both' }}>
             <div>
               <div
@@ -159,7 +173,7 @@ export default function Results({ result, meta, chat, onAsk }) {
       ))}
 
       {/* Transcript */}
-      <section style={{ padding: '14px 44px' }}>
+      <section style={{ padding: '14px var(--result-section-gutter, 44px)' }}>
         <div style={{ ...CARD, animation: 'fadeUp .9s cubic-bezier(.22,1,.36,1) .3s both' }}>
           <span style={LABEL}>Transcript</span>
           <div style={{ maxWidth: 760 }}>
@@ -200,7 +214,7 @@ export default function Results({ result, meta, chat, onAsk }) {
         </div>
       </section>
 
-      <Chat chat={chat} onAsk={onAsk} />
+      {!sampleMedia && questions}
     </article>
   );
 }

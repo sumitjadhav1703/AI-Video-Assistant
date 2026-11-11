@@ -1,84 +1,83 @@
-"""
-Local smoke-test entrypoint: runs the pipeline without the HTTP layer.
-
-    python -m backend.cli
-
-Needs the same env as the server (MISTRAL_API_KEY, GROQ_API_KEY, DATABASE_URL),
-since the vector store is Postgres-backed now. Not used in production.
-"""
+"""Interactive client using the same durable admission limits as the API."""
+import argparse
 import uuid
 
 from dotenv import load_dotenv
-
-from .utils.audio_processor import process_input, cleanup
-from .core.transcriber import transcribe_all
-from .core.summarizer import summarize, generate_title
-from .core.extractor import extract_action_items, extract_key_decisions, extract_questions
-from .core.rag_engine import build_rag_chain, ask_question
-
+from . import db
+from .jobs import OWNER_EVALUATION_QUESTIONS, run_job
+from .core.llm_gateway import operation_scope, get_llm
+from .core.vector_store import get_embeddings
+from .core.audio_budget import profile_for_language
+from .core.reranker import load_ranker
+from .core.rag_engine import load_rag_chain, ask_question
+from .usage_limits import Settings, client_key, require_provider_calls
 
 load_dotenv()
 
-def run_pipeline(source :str, language :str = "english") -> dict:
-    print("starting AI Video Assistant")
 
-    # Each run gets its own job_id, so its vectors are never mixed with another's.
+def run_pipeline(source: str | None, language: str = 'english', *, owner: bool = False, allow_paid: bool = False) -> dict:
+    if owner and (source is not None or language != 'english'):
+        raise ValueError('Owner evaluation uses only the built-in synthetic transcript.')
+    require_provider_calls(sarvam=language.lower() == 'hinglish')
     job_id = uuid.uuid4().hex
-    artifacts = []
+    with operation_scope(job_id, owner=owner, allow_paid=allow_paid):
+        get_llm()
+        get_embeddings()
+        load_ranker()
+    if not owner:
+        profile_for_language(language)
+    settings = Settings.from_env()
+    identity = client_key('127.0.0.1', settings.rate_limit_secret)
+    token = db.admit_job(job_id, language, identity, settings)
+    run_job(job_id, source, language, reservation_token=token, owner=owner, allow_paid=allow_paid)
+    result = db.get_job(job_id)
+    if not result or result['status'] != 'done':
+        raise RuntimeError('Processing failed.')
+    return {'job_id': job_id, **result}
 
-    try:
-        chunks, artifacts = process_input(source)
 
-        transcript = transcribe_all(chunks,language)
-        print(f"raw transcription (first 300 characters ) {transcript[:300]}")
-    finally:
-        cleanup(artifacts)
-
-    title = generate_title(transcript)
-
-    summary = summarize(transcript)
-
-    action_item = extract_action_items(transcript)
-
-    decisions = extract_key_decisions(transcript)
-    questions = extract_questions(transcript)
-
-    rag_chain = build_rag_chain(transcript, job_id)
-
-    return {
-        "job_id": job_id,
-        "title": title,
-        "transcript": transcript,
-        "summary": summary,
-        "action_items": action_item,
-        "key_decisions": decisions,
-        "open_questions": questions,
-        "rag_chain": rag_chain,
-    }
-
-if __name__ == "__main__":
-    # CLI entry point
-    source = input("Enter YouTube URL or local file path: ").strip()
-    language = input("Language (english/hinglish): ").strip() or "english"
-    result = run_pipeline(source, language)
-
-    print("\n" + "=" * 60)
-    print(f"📌 Title: {result['title']}")
-    print(f"\n📋 Summary:\n{result['summary']}")
-    print(f"\n✅ Action Items:\n{result['action_items']}")
-    print(f"\n🔑 Key Decisions:\n{result['key_decisions']}")
-    print(f"\n❓ Open Questions:\n{result['open_questions']}")
-    print("=" * 60)
-
-    # Phase 2 — Chat with your meeting via RAG
-    print("\n💬 Chat with your meeting (type 'exit' to quit)\n")
-    rag_chain = result["rag_chain"]
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--owner-evaluation', action='store_true', help='Use the built-in synthetic transcript and questions.')
+    parser.add_argument('--allow-paid', action='store_true', help='Explicitly allow configured paid routes for this owner evaluation.')
+    parser.add_argument('--tier', choices=('economy', 'strong'), default='economy', help='Owner evaluation chat tier.')
+    args = parser.parse_args()
+    if not args.owner_evaluation and (args.allow_paid or args.tier != 'economy'):
+        parser.error('--allow-paid and --tier strong require --owner-evaluation')
+    source = None
+    language = 'english'
+    if not args.owner_evaluation:
+        source = input('Enter YouTube URL or local file path: ').strip()
+        language = input('Language (english/hinglish): ').strip() or 'english'
+    result = run_pipeline(source, language, owner=args.owner_evaluation, allow_paid=args.allow_paid)
+    for label, key in [('Title', 'title'), ('Summary', 'summary'), ('Action Items', 'action_items'), ('Key Decisions', 'key_decisions'), ('Open Questions', 'open_questions')]:
+        print(f'\n{label}: {result[key]}')
+    settings = Settings.from_env()
+    identity = client_key('127.0.0.1', settings.rate_limit_secret)
+    questions = {str(index): question for index, question in enumerate(OWNER_EVALUATION_QUESTIONS, 1)}
+    if args.owner_evaluation:
+        for index, question in questions.items():
+            print(f'{index}. {question}')
     while True:
-        question = input("You: ").strip()
-        if question.lower() in ["exit", "quit", "q"]:
-            print("👋 Goodbye!")
+        prompt = '\nChoose a question number (or exit): ' if args.owner_evaluation else '\nYou (or exit): '
+        question = input(prompt).strip()
+        if question.lower() in ('exit', 'quit', 'q'):
             break
+        if args.owner_evaluation:
+            question = questions.get(question)
         if not question:
             continue
-        answer = ask_question(rag_chain, question)
-        print(f"\n🤖 Assistant: {answer}\n")
+        token = db.reserve_chat(result['job_id'], identity, settings)
+        try:
+            with operation_scope(result['job_id'], owner=args.owner_evaluation, allow_paid=args.allow_paid):
+                answer = ask_question(load_rag_chain(result['job_id'], args.tier), question)
+            print(f"\nAssistant: {answer['answer']}")
+        finally:
+            db.release_slot('chat', token)
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except Exception:
+        raise SystemExit('Processing failed. Please try again later.') from None
