@@ -65,7 +65,9 @@ function registerReadTool<Schema extends z.ZodType>(
       }
       return { content: [{ type: "text", text }] };
     } catch (error) {
-      return errorResult(error instanceof ToolError ? error.code : "TEMPORARY_UNAVAILABLE");
+      if (error instanceof ToolError) return errorResult(error.code);
+      console.error("mcp tool failed", name, error instanceof Error ? error.name : typeof error);
+      return errorResult("TEMPORARY_UNAVAILABLE");
     }
   });
 }

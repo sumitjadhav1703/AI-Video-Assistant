@@ -17,7 +17,8 @@ def prepare_documents(segments, job_id):
             pos += len(part) + 1
     docs = []
     for start in range(0, len(text), 450):
-        end = min(start + 500, len(text))
+        # Fold a tail shorter than the overlap into this chunk instead of emitting a near-duplicate chunk.
+        end = len(text) if len(text) - start <= 550 else start + 500
         covered = [s for left, right, s in ranges if left < end and right > start]
         if not covered:
             continue

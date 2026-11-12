@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { SANS, MONO, CREAM, MUTE, DIM } from '../lib/theme';
 
 // Top navigation: logo, live status, clock, and (when a session is active) a
-// "New session" reset. Nav + veil hide on scroll-down and return on scroll-up.
+// "Delete session" reset. Nav + veil hide on scroll-down and return on scroll-up.
 export default function Nav({ status, dotActive, dotPulse, showReset, resetDisabled, onReset }) {
   const navRef = useRef(null);
   const veilRef = useRef(null);
@@ -31,10 +31,12 @@ export default function Nav({ status, dotActive, dotPulse, showReset, resetDisab
       if (goingDown && y > 120 && nav) {
         nav.style.transform = 'translateY(-130%)';
         nav.style.opacity = '0';
+        nav.inert = true; // hidden controls must not take keyboard focus
         if (veil) veil.style.opacity = '0';
       } else if ((goingUp || y <= 120) && nav) {
         nav.style.transform = 'translateY(0)';
         nav.style.opacity = '1';
+        nav.inert = false;
         if (veil) veil.style.opacity = '1';
       }
     };
@@ -172,7 +174,9 @@ export default function Nav({ status, dotActive, dotPulse, showReset, resetDisab
                 data-hov="1"
                 data-mag="1"
                 disabled={resetDisabled}
-                onClick={onReset}
+                onClick={() => {
+                  if (window.confirm('Delete this session? The transcript, summary and chat will be removed and cannot be recovered.')) onReset();
+                }}
                 style={{
                   background: 'none',
                   border: '1px solid rgba(232,229,222,0.35)',
@@ -186,7 +190,7 @@ export default function Nav({ status, dotActive, dotPulse, showReset, resetDisab
                   transition: 'transform .3s cubic-bezier(.22,1,.36,1), background .2s, color .2s',
                 }}
               >
-                New session
+                Delete session
               </button>
             )}
           </div>

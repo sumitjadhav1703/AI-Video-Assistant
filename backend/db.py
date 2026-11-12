@@ -6,6 +6,7 @@ from datetime import timedelta, timezone
 from .usage_limits import Settings, LimitExceeded, JobUnavailable, JobBusy
 
 import psycopg
+from psycopg import sql
 from psycopg.rows import dict_row
 
 _RECOVERY_MIN_AGE = timedelta(minutes=30)
@@ -110,6 +111,7 @@ CREATE TABLE IF NOT EXISTS transcript_chunks (
             AND end_ms >= start_ms AND timing_precision <> 'unknown'))
 );
 CREATE INDEX IF NOT EXISTS transcript_chunks_job_id ON transcript_chunks(job_id);
+CREATE INDEX IF NOT EXISTS jobs_status_updated ON jobs(status, updated_at);
 """
 
 
@@ -257,6 +259,20 @@ def job_ids_older_than(days: int) -> list[str]:
             (days,),
         )
         return [row["id"] for row in cur.fetchall()]
+
+
+ATTEMPT_HISTORY_DAYS = 7
+
+
+def prune_attempt_history() -> None:
+    """Drop provider/audio attempt rows older than every quota window (24 h and the UTC day).
+    Usage counters and today's attempts are never touched, so no limit is refunded."""
+    with connect() as conn, conn.cursor() as cur:
+        for table in ('provider_attempts', 'audio_attempts'):
+            cur.execute("SELECT to_regclass(%s) AS table_name", (table,))
+            if cur.fetchone()['table_name']:
+                cur.execute(sql.SQL("DELETE FROM {} WHERE created_at < clock_timestamp() - make_interval(days => %s)")
+                            .format(sql.Identifier(table)), (ATTEMPT_HISTORY_DAYS,))
 
 
 def _lock_admission(cur):

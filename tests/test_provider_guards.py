@@ -15,11 +15,11 @@ from stt_fixture import groq_chain
 class ProviderGuardsTests(unittest.TestCase):
     def test_disabled_guard_covers_all_provider_factories(self):
         with patch.dict(os.environ, {'ENABLE_PROVIDER_CALLS': 'false'}):
-            for operation in (summarizer.get_llm, extractor.get_llm, rag_engine.get_llm,
+            for operation in (summarizer.get_llm, rag_engine.get_llm,
                               vector_store.get_embeddings,
-                              lambda: transcriber.transcribe_chunk_groq('missing'),
+                              lambda: transcriber._chunk_segments('missing', 1000),
                               lambda: transcriber._send_to_sarvam('missing'),
-                              lambda: transcriber.transcribe_chunk_sarvam('missing')):
+                              lambda: transcriber._sarvam_segments('missing', 1000)):
                 with self.subTest(operation=operation), self.assertRaises(RuntimeError):
                     operation()
 
@@ -29,7 +29,7 @@ class ProviderGuardsTests(unittest.TestCase):
                 [{'text': 'a' * 20000, 'start': 0, 'end': 1}],
                 [{'text': 'b' * 20001, 'start': 0, 'end': 1}]]):
             with self.assertRaises(ValueError):
-                transcriber.transcribe_all(['one', 'two'])
+                transcriber.transcribe_segments(['one', 'two'])
 
     def test_embeddings_are_bounded_without_hidden_retries(self):
         env = {'ENABLE_PROVIDER_CALLS': 'true', 'RATE_LIMIT_SECRET': 'x' * 32,
@@ -70,8 +70,7 @@ class ProviderGuardsTests(unittest.TestCase):
 
     def test_oversized_context_rejected_before_model_or_embedding(self):
         operations = (summarizer.summarize, summarizer.generate_title,
-                      extractor.extract_action_items, extractor.extract_key_decisions,
-                      extractor.extract_questions, lambda text: vector_store.build_vector_store(text, 'job'),
+                      extractor.extract_findings, lambda text: vector_store.build_vector_store(text, 'job'),
                       lambda text: rag_engine.build_rag_chain(text, 'job'))
         for operation in operations:
             with self.subTest(operation=operation), self.assertRaises(ValueError):
@@ -81,7 +80,7 @@ class ProviderGuardsTests(unittest.TestCase):
         self.enterContext(groq_chain())
         with patch.object(transcriber, '_wav_duration_ms', return_value=1000), \
                 patch.object(transcriber, '_groq_segments', return_value=[{'text': 'a' * 40000, 'start': 0, 'end': 1}]):
-            self.assertEqual(len(transcriber.transcribe_all(['one'])), 40000)
+            self.assertEqual(len(' '.join(s['text'] for s in transcriber.transcribe_segments(['one']))), 40000)
 
     def _sample_wav(self):
         directory = self.enterContext(tempfile.TemporaryDirectory())
@@ -105,7 +104,7 @@ class ProviderGuardsTests(unittest.TestCase):
                 patch.object(transcriber.audio_budget, 'reserve_audio_attempt') as reserve, operation_scope('test-job'):
             create = groq.return_value.audio.transcriptions.create
             create.return_value = {'segments': [{'text': 'text', 'start': 0, 'end': 1}]}
-            self.assertEqual(transcriber.transcribe_chunk_groq(path), 'text')
+            self.assertEqual(transcriber._chunk_segments(path)[0]['text'], 'text')
             self.assertEqual(groq.call_args.kwargs['timeout'], 60)
             self.assertEqual(groq.call_args.kwargs['max_retries'], 0)
             self.assertEqual(create.call_args.kwargs['model'], model)
@@ -145,7 +144,7 @@ class ProviderGuardsTests(unittest.TestCase):
         with patch.dict(os.environ, env, clear=True), patch.object(transcriber, 'Groq') as groq, \
                 patch.object(transcriber.requests, 'post') as post, \
                 patch.object(transcriber.audio_budget, 'reserve_audio_attempt') as reserve, operation_scope('test-job'):
-            for transcribe in (transcriber.transcribe_chunk_groq, transcriber._send_to_sarvam):
+            for transcribe in (transcriber._chunk_segments, transcriber._send_to_sarvam):
                 with self.subTest(transcribe=transcribe), self.assertRaises(ValueError):
                     transcribe('missing')
         groq.assert_not_called()

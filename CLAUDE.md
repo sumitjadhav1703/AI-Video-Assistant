@@ -43,7 +43,7 @@ Frontend (`web/`, Node 22 or 24):
 ```bash
 npm ci
 npm run dev -- --host 127.0.0.1     # http://127.0.0.1:5173, proxies to localhost:8000
-npm test                            # node --test src/api.test.js
+npm test                            # node --test src/api.test.js src/lib/parse.test.js
 npm run build
 ```
 

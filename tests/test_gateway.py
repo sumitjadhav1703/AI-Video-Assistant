@@ -384,6 +384,33 @@ class GatewayTests(unittest.TestCase):
                 else:
                     cooldown.assert_not_called()
 
+    def test_transient_route_failure_recovers_after_cooldown_but_auth_failure_does_not(self):
+        groq = {**ROUTE, 'alias': 'groq', 'provider': 'groq', 'model': 'groq/test', 'api_key_env': 'GROQ_API_KEY'}
+        env = {**ENV, 'LLM_ROUTES_JSON': json.dumps([ROUTE, groq]), 'GROQ_API_KEY': 'offline'}
+        for status, recovers in ((503, True), (429, True), (401, False)):
+            calls = []
+
+            def call(route, *args, status=status):
+                calls.append(route.alias)
+                if route.provider == 'groq' and len(calls) == 1:
+                    error = RuntimeError('provider error')
+                    error.status_code = status
+                    raise error
+                return AIMessage(content='Ready')
+
+            clock = [1000.0]
+            with self.subTest(status=status), patch.dict(os.environ, env, clear=True), \
+                    patch('backend.core.provider_budget.reserve_attempt'), \
+                    patch('backend.core.provider_budget.record_route_cooldown'), \
+                    patch.object(gateway.time, 'monotonic', side_effect=lambda: clock[0]), \
+                    patch.object(gateway, '_invoke_route', side_effect=call), gateway.operation_scope('job-1'):
+                model = gateway.get_llm()
+                model.invoke('first stage')
+                clock[0] += 120  # a later pipeline stage, past both cooldowns
+                model.invoke('later stage')
+            self.assertEqual(calls[0], 'groq')
+            self.assertEqual(calls[2], 'groq' if recovers else 'demo-a')
+
     def test_route_quota_or_local_context_denial_skips_without_dispatch(self):
         groq = {**ROUTE, 'alias': 'groq', 'provider': 'groq', 'model': 'groq/test', 'api_key_env': 'GROQ_API_KEY'}
         env = {**ENV, 'LLM_ROUTES_JSON': json.dumps([ROUTE, groq]), 'GROQ_API_KEY': 'offline'}
@@ -461,18 +488,29 @@ class GatewayTests(unittest.TestCase):
 
     def test_structured_summary_title_and_findings_preserve_public_text(self):
         findings = '{"action_items":[{"task":"Ship","owner":"Ana","deadline":"Friday"}],"key_decisions":["Use Python"],"open_questions":[]}'
-        responses = [AIMessage(content='{"bullets":["First summary"]}'),
-                     AIMessage(content='{"bullets":["Final summary"]}'),
+        responses = [AIMessage(content='{"bullets":["Only summary"]}'),
                      AIMessage(content='{"title":"Team Planning"}'),
-                     AIMessage(content=findings), AIMessage(content=findings), AIMessage(content=findings)]
+                     AIMessage(content=findings)]
         with patch.dict(os.environ, ENV, clear=True), patch('backend.core.provider_budget.reserve_attempt'), \
                 patch.object(gateway, '_invoke_route', side_effect=responses), gateway.operation_scope('job-1'):
-            self.assertEqual(summarizer.summarize('Planning notes'), '- Final summary')
+            # A single-chunk transcript needs no reduce call.
+            self.assertEqual(summarizer.summarize('Planning notes'), '- Only summary')
             self.assertEqual(summarizer.generate_title('Planning notes'), 'Team Planning')
-            self.assertEqual(extractor.extract_action_items('Planning notes'),
-                             '1. Task: Ship\n   Owner: Ana\n   Deadline: Friday')
-            self.assertEqual(extractor.extract_key_decisions('Planning notes'), '1. Use Python')
-            self.assertEqual(extractor.extract_questions('Planning notes'), 'No open questions found.')
+            self.assertEqual(extractor.extract_findings('Planning notes'), {
+                'action_items': '1. Task: Ship\n   Owner: Ana\n   Deadline: Friday',
+                'key_decisions': '1. Use Python', 'open_questions': 'No open questions found.'})
+
+    def test_blank_finding_falls_back_to_next_route_instead_of_failing_job(self):
+        blank = '{"action_items":[],"key_decisions":["  "],"open_questions":[]}'
+        good = '{"action_items":[],"key_decisions":["Use Python"],"open_questions":[]}'
+        groq = {**ROUTE, 'alias': 'groq', 'provider': 'groq', 'api_key_env': 'GROQ_API_KEY', 'model': 'groq/test'}
+        env = {**ENV, 'LLM_ROUTES_JSON': json.dumps([ROUTE, groq]), 'GROQ_API_KEY': 'offline'}
+        with patch.dict(os.environ, env, clear=True), patch('backend.core.provider_budget.reserve_attempt'), \
+                patch('backend.core.provider_budget.record_attempt_result'), \
+                patch.object(gateway, '_invoke_route', side_effect=[AIMessage(content=blank), AIMessage(content=good)]) as network, \
+                gateway.operation_scope('job-1'):
+            self.assertEqual(extractor.extract_findings('Planning notes')['key_decisions'], '1. Use Python')
+        self.assertEqual(network.call_count, 2)
 
     def test_invalid_structured_output_with_no_other_route_fails_after_one_call(self):
         with patch.dict(os.environ, ENV, clear=True), patch('backend.core.provider_budget.reserve_attempt'), \

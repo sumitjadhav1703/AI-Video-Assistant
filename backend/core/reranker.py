@@ -14,6 +14,7 @@ MODEL_FILES = ('flashrank-TinyBERT-L-2-v2.onnx', 'config.json', 'tokenizer.json'
 MANIFEST_PATH = Path(__file__).resolve().parents[1] / 'model_assets' / 'manifest.json'
 _ranker = None
 _ranker_path = None
+_counter = None
 _lock = threading.Lock()
 _inference_lock = threading.Lock()
 
@@ -37,7 +38,7 @@ def verify_model_assets(directory):
 
 
 def load_ranker():
-    global _ranker, _ranker_path
+    global _ranker, _ranker_path, _counter
     directory = Path(os.getenv('RERANK_MODEL_DIR', str(MANIFEST_PATH.parent / MODEL_NAME))).resolve()
     with _lock:
         if _ranker is None or _ranker_path != directory:
@@ -56,6 +57,11 @@ def load_ranker():
 
                 _ranker = OfflineRanker(model_name=MODEL_NAME, cache_dir=str(directory.parent), max_length=512)
                 _ranker_path = directory
+                # A separate tokenizer measures original pairs without disabling runtime truncation.
+                from tokenizers import Tokenizer
+                _counter = Tokenizer.from_str(_ranker.tokenizer.to_str())
+                _counter.no_truncation()
+                _counter.no_padding()
             except RetrievalUnavailable:
                 raise
             except Exception as exc:
@@ -70,12 +76,7 @@ def rerank_documents(query, documents):
     try:
         from flashrank import RerankRequest
         with _inference_lock:
-            # A separate tokenizer measures original pairs without disabling runtime truncation.
-            from tokenizers import Tokenizer
-            counter = Tokenizer.from_str(ranker.tokenizer.to_str())
-            counter.no_truncation()
-            counter.no_padding()
-            lengths = [len(counter.encode(query, doc.page_content).ids) for doc in documents]
+            lengths = [len(_counter.encode(query, doc.page_content).ids) for doc in documents]
             passages = [{'id': doc.metadata['chunk_id'], 'text': doc.page_content} for doc in documents]
             ranked = ranker.rerank(RerankRequest(query=query, passages=passages))
         originals = {doc.metadata['chunk_id']: doc for doc in documents}

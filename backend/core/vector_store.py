@@ -1,6 +1,9 @@
 """Build and query per-job PGVector collections using a pinned embedding route."""
+from functools import lru_cache
+
 from langchain_core.embeddings import Embeddings
 from langchain_postgres import PGVector
+from sqlalchemy import create_engine
 
 from .. import db
 from ..db import collection_for, get_sqlalchemy_url
@@ -15,6 +18,23 @@ from .llm_gateway import assert_private_runtime, current_operation, validate_tra
 from .retrieval import RetrievalUnavailable
 
 GEMINI_ROUTE = 'gemini-embeddings'
+
+
+@lru_cache(maxsize=1)
+def _engine(url):
+    """One small pooled engine per process. Given a URL, PGVector builds a new engine per call and never
+    disposes it, without the connect/statement timeouts that db.connect applies."""
+    return create_engine(url, pool_size=1, max_overflow=1, pool_pre_ping=True, pool_recycle=240,
+                         connect_args={'connect_timeout': 10,
+                                       'options': '-c statement_timeout=15000 -c lock_timeout=5000'})
+
+
+def _store(job_id, embeddings):
+    url = get_sqlalchemy_url()
+    # init_db creates the pgvector extension once; repeating it on every chat is a needless write.
+    return PGVector(collection_name=collection_for(job_id), embeddings=embeddings,
+                    connection=_engine(url) if isinstance(url, str) else url, use_jsonb=True,
+                    create_extension=False)
 
 
 def available_embedding_routes():
@@ -90,8 +110,7 @@ def build_vector_store(transcript: str, job_id: str, documents=None) -> PGVector
             continue
 
         # The whole corpus has been embedded in one space before any index writes.
-        vector_store = PGVector(collection_name=collection_for(job_id), embeddings=embeddings,
-                                connection=get_sqlalchemy_url(), use_jsonb=True)
+        vector_store = _store(job_id, embeddings)
         vector_store.add_embeddings(texts=texts, embeddings=vectors,
                                     metadatas=[doc.metadata for doc in documents],
                                     ids=[doc.id for doc in documents])
@@ -115,5 +134,4 @@ def load_vector_store(job_id: str) -> PGVector:
         route_id = GEMINI_ROUTE
     if space != EMBEDDING_SPACES.get(route_id):
         raise RetrievalUnavailable('This session has an unsupported embedding index.')
-    return PGVector(collection_name=collection_for(job_id), embeddings=get_embeddings(route_id),
-                    connection=get_sqlalchemy_url(), use_jsonb=True)
+    return _store(job_id, get_embeddings(route_id))

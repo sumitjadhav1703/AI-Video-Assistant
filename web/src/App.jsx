@@ -11,12 +11,19 @@ import { startJob, getDemoMode, getStatus, getResult, askChat, releaseJob } from
 const SESSION_KEY = 'minutes.live-session';
 const POLL_WINDOW = 5 * 60 * 1000;
 const READ_TIMEOUT = 20 * 1000;
+const MAX_BACKOFF = 20 * 1000;
+const PAUSED = 'Automatic checks have paused.';
+const PAUSED_NOTICE = `${PAUSED} Use Check status to try again.`;
 
 function savedSession() {
   try {
     const value = JSON.parse(sessionStorage.getItem(SESSION_KEY));
     if (typeof value?.id === 'string' && value.id && typeof value.token === 'string' && value.token) {
-      return { id: value.id, token: value.token };
+      return {
+        id: value.id, token: value.token,
+        language: value.language === 'hinglish' ? 'hinglish' : 'english',
+        fileName: typeof value.fileName === 'string' ? value.fileName : undefined,
+      };
     }
   } catch {
     // The app can continue in memory when storage is unavailable.
@@ -43,7 +50,7 @@ export default function App() {
   const finishIntro = useCallback(() => setBooting(false), []);
   const [mode, setMode] = useState('loading');
   const [modeAttempt, setModeAttempt] = useState(0);
-  const [meta, setMeta] = useState({ language: 'english' });
+  const [meta, setMeta] = useState(() => ({ language: session?.language || 'english', fileName: session?.fileName }));
   const [languages, setLanguages] = useState(['english']);
   const [phase, setPhase] = useState('processing');
   const [stageIdx, setStageIdx] = useState(-1);
@@ -57,7 +64,7 @@ export default function App() {
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const writes = useRef({ upload: false, chat: false, deletion: false });
-  const pollTiming = useRef({ start: 0, retryAt: 0 });
+  const pollTiming = useRef({ start: 0, retryAt: 0, backoff: 0 });
   const checkStatus = useRef(null);
 
   const clearSession = useCallback((message) => {
@@ -69,7 +76,7 @@ export default function App() {
     setPhase('processing');
     setDeleteError('');
     setPollNotice('');
-    pollTiming.current = { start: 0, retryAt: 0 };
+    pollTiming.current = { start: 0, retryAt: 0, backoff: 0 };
     setNotice(message);
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, []);
@@ -103,13 +110,12 @@ export default function App() {
     const schedule = () => {
       if (disposed || document.hidden) return;
       const now = Date.now();
-      const cadence = now - timing.start < 30000 ? 3000 : 5000;
+      const cadence = Math.max(now - timing.start < 30000 ? 3000 : 5000, timing.backoff);
       const next = Math.max(now + cadence, timing.retryAt);
       clearTimeout(timeout);
       if (next >= deadline) {
-        setPollNotice((message) => message
-          ? `${message} Automatic checks have paused.`
-          : 'Automatic checks have paused. Use Check status to try again.');
+        setPollNotice((message) => !message ? PAUSED_NOTICE
+          : message.includes(PAUSED) ? message : `${message} ${PAUSED}`);
         return;
       }
       timeout = setTimeout(() => read(), next - now);
@@ -119,7 +125,7 @@ export default function App() {
       if (disposed || document.hidden || controller) return;
       const remaining = deadline - Date.now();
       if (!manual && remaining <= 0) {
-        setPollNotice('Automatic checks have paused. Use Check status to try again.');
+        setPollNotice(PAUSED_NOTICE);
         return;
       }
       if (Date.now() < timing.retryAt) {
@@ -136,6 +142,7 @@ export default function App() {
       try {
         const status = await getStatus(session, request.signal);
         if (disposed || request.signal.aborted) return;
+        timing.backoff = 0;
         if (status.status === 'done') {
           const response = await getResult(session, request.signal);
           if (disposed || request.signal.aborted) return;
@@ -145,17 +152,26 @@ export default function App() {
         } else if (status.status === 'error' || status.status === 'interrupted') {
           setPollNotice(status.error || 'The analysis stopped. Delete the session to start again.');
           setPhase('error');
-        } else {
+        } else if (status.status === 'queued' || status.status === 'running') {
           const index = STEP_ORDER.indexOf(status.step);
           if (index >= 0) setStageIdx(index);
           setPollNotice(manual && Date.now() >= deadline ? 'The clip is still processing. You can check again.' : '');
           again = true;
+        } else {
+          // Unknown or legacy states (such as 'deleting') will not finish on their own.
+          setPollNotice('This session can no longer be processed. Delete the session to start again.');
+          setPhase('error');
         }
       } catch (error) {
         if (disposed || document.hidden || pausedRequest === request) return;
         if (expired(error)) clearSession(EXPIRED_NOTICE);
-        else if (retryable(error)) {
+        else if (error.status === 409) {
+          // The result endpoint reports a failed job with 409.
+          setPollNotice(error.message);
+          setPhase('error');
+        } else if (retryable(error)) {
           if (error.retryAfterMs) timing.retryAt = Date.now() + error.retryAfterMs;
+          if (error.status !== 429) timing.backoff = Math.min(MAX_BACKOFF, (timing.backoff || 3000) * 2);
           setPollNotice(request.signal.aborted ? 'The status check timed out.' : error.message);
           again = true;
         } else {
@@ -209,7 +225,7 @@ export default function App() {
       if (typeof id !== 'string' || !id || typeof token !== 'string' || !token) {
         throw new Error('The backend did not return a usable session.');
       }
-      const created = { id, token };
+      const created = { id, token, language, fileName: file.name };
       saveSession(created);
       setMeta({ fileName: file.name, fileSize: file.size, language });
       setSession(created);
@@ -231,12 +247,12 @@ export default function App() {
     try {
       const response = await askChat(session, question);
       setChat((messages) => messages.map((message) => message.id === id
-        ? { ...message, a: response.answer, abstained: response.abstained, citations: response.citations, model: response.model, retrieval: response.retrieval, pending: false }
+        ? { ...message, a: response.answer, abstained: response.abstained, citations: response.citations, pending: false }
         : message));
     } catch (error) {
       if (expired(error)) clearSession(EXPIRED_NOTICE);
       else setChat((messages) => messages.map((message) => message.id === id
-        ? { ...message, a: error.message, pending: false }
+        ? { ...message, a: error.message, error: true, pending: false }
         : message));
     } finally {
       writes.current.chat = false;
@@ -292,7 +308,7 @@ export default function App() {
               </section>
             )}
             {phase === 'processing' && <Processing fileName={meta.fileName || 'Live clip'} stageIdx={stageIdx} />}
-            {phase === 'ready' && result && <Results result={result} meta={meta} chat={chat} onAsk={ask} economyOnly />}
+            {phase === 'ready' && result && <Results result={result} meta={meta} chat={chat} onAsk={ask} />}
             {phase === 'error' && <h1 className="minutes-session-feedback">Analysis stopped</h1>}
           </>
         )}

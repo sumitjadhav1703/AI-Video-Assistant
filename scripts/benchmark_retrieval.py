@@ -97,9 +97,9 @@ if __name__ == '__main__':
         import_seconds = None
         if args.full_service:
             started = time.perf_counter()
-            import backend.api
-            import litellm
-            import langchain_litellm
+            import backend.api  # noqa: F401 - timing the import is the point
+            import litellm  # noqa: F401
+            import langchain_litellm  # noqa: F401
             import_seconds = time.perf_counter() - started
         report = run()
         if args.full_service:

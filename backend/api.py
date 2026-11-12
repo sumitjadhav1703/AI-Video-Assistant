@@ -15,6 +15,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 from starlette._utils import get_route_path
+from starlette.concurrency import run_in_threadpool
 from starlette.datastructures import UploadFile as StarletteUploadFile
 from starlette.responses import JSONResponse
 
@@ -25,9 +26,9 @@ from .core.audio_budget import profile_for_language
 from .core.provider_budget import JobBudgetExceeded
 from .core.reranker import load_ranker
 from .core.retrieval import RetrievalUnavailable
-from .core.embedding_routes import EmbeddingRouteUnavailable
+from .core.embedding_routes import EmbeddingRouteUnavailable, MAX_TEXT_BYTES as MAX_QUESTION_BYTES
 from .core.guardrails import sanitize_text, GuardrailError
-from .core.llm_gateway import operation_scope, get_llm
+from .core.llm_gateway import operation_scope, get_llm, private_litellm
 from .core.telemetry import metric
 from .core.vector_store import get_embeddings
 from .usage_limits import Settings, client_key, require_provider_calls, LimitExceeded, JobBusy, JobUnavailable
@@ -37,12 +38,16 @@ logger = logging.getLogger(__name__)
 _COPY_CHUNK = 1024 * 1024
 ADMIN_TOKEN = os.getenv('ADMIN_TOKEN', '').strip()
 _UNAVAILABLE = 'Service is temporarily unavailable. Please try again later.'
+MAX_CLEANUP_DAYS = 3650
 
 
 def preflight_pipeline():
     get_llm()
     get_embeddings()
     load_ranker()
+    # Import LiteLLM before admission: at 0.1 CPU its first import took ~55 s, which the 60 s
+    # generation deadline then charged to the first provider call (the title stage).
+    private_litellm()
 
 
 def demo_mode():
@@ -86,8 +91,8 @@ def _job_audience(job_id, authorization):
 def _valid_owner_token(presented):
     token = os.getenv('OWNER_EVALUATION_TOKEN', '').strip()
     return bool(re.fullmatch(r'[A-Za-z0-9_-]{43,128}', token)
-                and token not in (ADMIN_TOKEN, *(os.getenv(name, '').strip() for name in (
-                    'JOB_TOKEN_SECRET', 'RATE_LIMIT_SECRET', 'DEMO_INVITE_CODE', 'ADMIN_TOKEN')))
+                and token not in tuple(os.getenv(name, '').strip() for name in (
+                    'JOB_TOKEN_SECRET', 'RATE_LIMIT_SECRET', 'DEMO_INVITE_CODE', 'ADMIN_TOKEN'))
                 and hmac.compare_digest(presented.encode('latin-1'), token.encode('ascii')))
 
 
@@ -168,7 +173,8 @@ class RequestLimitsMiddleware:
                 return await JSONResponse({'detail': 'Request body is too large.'}, status_code=413)(scope, receive, send)
         if path == '/jobs' and not owner:
             try:
-                preflight_pipeline()
+                # Loads ONNX and hashes model files on first use: keep it off the event loop.
+                await run_in_threadpool(preflight_pipeline)
             except (ValueError, RuntimeError):
                 return await JSONResponse({'detail': 'Processing is disabled until verified free-only provider access is configured.'}, status_code=503)(scope, receive, send)
         received = 0
@@ -202,7 +208,9 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title='AI Video Assistant', lifespan=lifespan)
+_API_DOCS = os.getenv('ENABLE_API_DOCS', '').strip().lower() == 'true'
+app = FastAPI(title='AI Video Assistant', lifespan=lifespan, docs_url='/docs' if _API_DOCS else None,
+              redoc_url=None, openapi_url='/openapi.json' if _API_DOCS else None)
 app.add_middleware(RequestLimitsMiddleware)
 
 
@@ -234,11 +242,17 @@ async def validation_error(_request: Request, error: RequestValidationError):
 
 def allowed_origins() -> list[str]:
     raw = os.getenv('FRONTEND_ORIGIN', '').strip()
-    return [o.strip() for o in raw.split(',') if o.strip()] if raw else ['http://localhost:5173']
+    # A wildcard would let any site drive the API; origins must be listed explicitly.
+    origins = [o.strip() for o in raw.split(',') if o.strip() and o.strip() != '*']
+    return origins or ['http://localhost:5173']
 
 
-app.add_middleware(CORSMiddleware, allow_origins=allowed_origins(), allow_credentials=True,
-                   allow_methods=['*'], allow_headers=['*'], expose_headers=['Retry-After'])
+# Job access uses bearer tokens, never cookies, so credentialed CORS is unnecessary.
+app.add_middleware(CORSMiddleware, allow_origins=allowed_origins(), allow_credentials=False,
+                   allow_methods=['GET', 'POST', 'DELETE'],
+                   allow_headers=['Authorization', 'Content-Type', 'X-Demo-Invite', 'X-Owner-Evaluation',
+                                  'X-Owner-Allow-Paid'],
+                   expose_headers=['Retry-After'])
 
 
 class ChatRequest(BaseModel):
@@ -344,13 +358,16 @@ async def create_job(
             if len(form.multi_items()) != 1 or set(form) != {'demo_acknowledged'} or uploads:
                 raise HTTPException(400, 'Owner evaluation uses only the built-in synthetic transcript.')
             allow_paid = request.state.owner_allow_paid
-            try:
+            def owner_preflight():
                 with operation_scope(job_id, owner=True, allow_paid=allow_paid):
                     preflight_pipeline()
+            try:
+                await run_in_threadpool(owner_preflight)
             except (ValueError, RuntimeError):
                 raise HTTPException(503, _UNAVAILABLE) from None
             job_capability = _job_token(job_id, owner=True)
-            token = _database_call(db.admit_job, job_id, language, _identity(request, settings), settings)
+            token = await run_in_threadpool(_database_call, db.admit_job, job_id, language,
+                                            _identity(request, settings), settings)
             background_tasks.add_task(run_job, job_id, None, reservation_token=token, owner=True, allow_paid=allow_paid)
             handed_off = True
             return {'job_id': job_id, 'job_token': job_capability, 'status': 'queued',
@@ -361,13 +378,20 @@ async def create_job(
             raise HTTPException(400, 'Hinglish transcription is not available right now.')
         if len(uploads) > 1:
             raise HTTPException(400, 'Provide only one file.')
+        # Reject bad files before admission so they never consume the caller's daily allowance.
+        too_large = HTTPException(413, f'File too large (max {settings.max_upload_bytes // (1024 * 1024)} MB).')
+        if file.size == 0:
+            raise HTTPException(400, 'File is empty.')
+        if file.size is not None and file.size > settings.max_upload_bytes:
+            raise too_large
         try:
             require_provider_calls()
             profile_for_language(language)
         except (ValueError, RuntimeError):
             raise HTTPException(503, _UNAVAILABLE) from None
         job_capability = _job_token(job_id)
-        token = _database_call(db.admit_job, job_id, language, _identity(request, settings), settings)
+        token = await run_in_threadpool(_database_call, db.admit_job, job_id, language,
+                                        _identity(request, settings), settings)
         fd, source = tempfile.mkstemp(suffix='.media')
         total = 0
         copy_started = time.monotonic()
@@ -375,7 +399,7 @@ async def create_job(
             while chunk := await file.read(_COPY_CHUNK):
                 total += len(chunk)
                 if total > settings.max_upload_bytes:
-                    raise HTTPException(413, f'File too large (max {settings.max_upload_bytes // (1024 * 1024)} MB).')
+                    raise too_large
                 out.write(chunk)
         metric('upload_copy', bytes=total, elapsed_ms=round((time.monotonic() - copy_started) * 1000))
         if not total:
@@ -397,11 +421,11 @@ async def create_job(
                     pass
             if token:
                 try:
-                    db.fail_job(job_id, 'Upload was interrupted. Please start a new job.')
+                    await run_in_threadpool(db.fail_job, job_id, 'Upload was interrupted. Please start a new job.')
                 except Exception as error:
                     logger.warning('job failure update failed: %s', type(error).__name__)
                 else:
-                    _release_slot('processing', token)
+                    await run_in_threadpool(_release_slot, 'processing', token)
         for uploaded in uploads:
             await uploaded.close()
 
@@ -420,7 +444,8 @@ def job_result(job_id: str):
     if not job:
         raise HTTPException(404, 'Job not found.')
     if job['status'] == 'error':
-        raise HTTPException(500, job['error'] or 'Job failed.')
+        # A failed job is a resource state, not a server fault.
+        raise HTTPException(409, job['error'] or 'Job failed.')
     if job['status'] == 'interrupted':
         raise HTTPException(409, job['error'] or db.INTERRUPTED_MESSAGE)
     if job['status'] != 'done':
@@ -441,6 +466,9 @@ def job_chat(job_id: str, body: ChatRequest, request: Request):
         question = sanitize_text(body.question)
     except GuardrailError:
         raise HTTPException(422, 'Question could not be processed.') from None
+    if len(question.encode('utf-8')) > MAX_QUESTION_BYTES:
+        # Non-Latin scripts use up to 3 bytes per character; the embedding input is byte-bounded.
+        raise HTTPException(422, 'Question is too long. Please shorten it.')
     if body.tier != 'economy' and not owner:
         raise HTTPException(422, 'Only economy is available in the live demo.')
     settings = Settings.from_env()
@@ -479,12 +507,12 @@ def delete_job(job_id: str):
 
 @app.post('/admin/cleanup')
 def admin_cleanup(older_than_days: int = 1, x_admin_token: str | None = Header(default=None)):
-    if not ADMIN_TOKEN:
-        raise HTTPException(503, 'Cleanup is disabled — set ADMIN_TOKEN to enable it.')
+    if len(ADMIN_TOKEN) < 32:
+        raise HTTPException(503, 'Cleanup is disabled — set ADMIN_TOKEN (32+ characters) to enable it.')
     if not x_admin_token or not hmac.compare_digest(x_admin_token.encode('latin-1'), ADMIN_TOKEN.encode('utf-8')):
         raise HTTPException(401, 'Invalid or missing admin token.')
-    if older_than_days < 0:
-        raise HTTPException(400, 'older_than_days must be >= 0.')
+    if not 0 <= older_than_days <= MAX_CLEANUP_DAYS:
+        raise HTTPException(400, f'older_than_days must be between 0 and {MAX_CLEANUP_DAYS}.')
     deleted = 0
     failed = False
     for job_id in _database_call(db.job_ids_older_than, older_than_days):
@@ -494,6 +522,11 @@ def admin_cleanup(older_than_days: int = 1, x_admin_token: str | None = Header(d
         except HTTPException as error:
             if error.status_code not in (404, 409):
                 failed = True
+    try:
+        db.prune_attempt_history()
+    except Exception as error:
+        logger.warning('attempt history pruning failed: %s', type(error).__name__)
+        failed = True
     if failed:
         raise HTTPException(503, 'Cleanup was incomplete. Please retry.')
     return {'deleted': deleted, 'older_than_days': older_than_days}

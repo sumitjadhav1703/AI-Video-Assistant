@@ -43,7 +43,7 @@ class Settings:
             enabled, _enabled('ENABLE_SARVAM'), secret,
             min(_positive('MAX_UPLOAD_MB', 25), 25) * 1024 * 1024,
             min(_positive('JOBS_PER_IP_DAY', 1), 1), min(_positive('JOBS_GLOBAL_DAY', 5), 5),
-            min(_positive('CHATS_PER_IP_MINUTE', 2), 2), _positive('CHATS_PER_IP_DAY', 20),
+            min(_positive('CHATS_PER_IP_MINUTE', 2), 2), min(_positive('CHATS_PER_IP_DAY', 20), 20),
             min(_positive('CHATS_PER_JOB_DAY', 3), 3), min(_positive('CHATS_GLOBAL_DAY', 15), 15),
         )
 

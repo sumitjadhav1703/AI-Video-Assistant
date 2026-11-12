@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS provider_route_cooldowns (
     until_at TIMESTAMPTZ NOT NULL, PRIMARY KEY (route_alias, provider, model)
 );
 CREATE INDEX IF NOT EXISTS provider_attempts_window ON provider_attempts(provider, created_at);
+CREATE INDEX IF NOT EXISTS provider_attempts_job ON provider_attempts(job_id);
 """
 
 

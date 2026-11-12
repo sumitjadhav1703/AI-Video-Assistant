@@ -21,9 +21,7 @@ groq>=0.9.0                       # whisper-large-v3-turbo for English
 requests>=2.32.0                  # Sarvam STT-translate for Hinglish
 
 # ── LLM Orchestration — LangChain LCEL + audited in-process LiteLLM ──────────────────────────────
-langchain>=0.2.0
 langchain-core>=0.2.0
-langchain-community>=0.2.0
 litellm==1.108.5
 langchain-litellm==0.11.2
 openai==3.46.0                   # Groq's OpenAI-compatible generation transport

@@ -36,12 +36,6 @@ TRANSLATION_MODELS = ('whisper-large-v3',)
 # 16kHz mono and chunks at 5 minutes (~9.6MB), which keeps us under that ceiling.
 
 
-def transcribe_chunk_groq(chunk_path: str) -> str:
-    from .guardrails import sanitize_text
-    segments = _chunk_segments(chunk_path)
-    return sanitize_text(' '.join(segment['text'] for segment in segments))
-
-
 def _send_to_sarvam(piece_path: str) -> str:
     profile = audio_budget.profile_for_language('hinglish')
     duration = _wav_duration_ms(piece_path)
@@ -59,31 +53,6 @@ def _send_to_sarvam(piece_path: str) -> str:
     if not response.ok:
         response.raise_for_status()
     return response.json().get('transcript', '')
-
-
-def transcribe_chunk_sarvam(chunk_path: str) -> str:
-    from .guardrails import sanitize_text
-    audio_budget.profile_for_language('hinglish')
-    segments = _sarvam_segments(chunk_path, _wav_duration_ms(chunk_path))
-    return sanitize_text(' '.join(segment['text'] for segment in segments))
-
-
-def transcribe_chunk(chunk_path: str, language: str = "english") -> str:
-    """
-    Route one chunk to Groq or Sarvam depending on language choice.
-    - english  → Groq (hosted whisper-large-v3-turbo)
-    - hinglish → Sarvam (translates to English while transcribing)
-    """
-    if language == "hinglish":
-        return transcribe_chunk_sarvam(chunk_path)
-    if language == "english":
-        return transcribe_chunk_groq(chunk_path)
-    raise ValueError("Unsupported transcription language")
-
-
-def transcribe_all(chunks: list, language: str = "english") -> str:
-    from .guardrails import sanitize_text
-    return sanitize_text(' '.join(segment['text'] for segment in transcribe_segments(chunks, language)))
 
 
 def _wav_duration_ms(path):
@@ -161,7 +130,10 @@ def _meta_segments(path, profile):
     import json
     from concurrent.futures import ThreadPoolExecutor
     duration = _wav_duration_ms(path)
-    audio_budget.reserve_audio_attempt(current_operation(), profile, duration)
+    starts = range(0, duration, META_PIECE_SECONDS * 1000)
+    # Each piece is its own provider request, so each one counts against rpm/rpd before any is sent.
+    for start in starts:
+        audio_budget.reserve_audio_attempt(current_operation(), profile, min(META_PIECE_SECONDS * 1000, duration - start))
     audio = AudioSegment.from_wav(path)
     settings = json.dumps({'model': profile.model, 'mode': 'ENDPOINTING', 'audioEncoding': 'WAV', 'languageBias': ['en']})
 
@@ -177,7 +149,7 @@ def _meta_segments(path, profile):
                 for turn in turns if (turn.get('transcript') or '').strip()]
 
     with ThreadPoolExecutor(max_workers=META_PARALLEL) as pool:
-        pieces = list(pool.map(piece, range(0, duration, META_PIECE_SECONDS * 1000)))
+        pieces = list(pool.map(piece, starts))
     return [segment for result in pieces for segment in result]
 
 
@@ -241,7 +213,7 @@ def _normalize_segments(raw, duration, precision, slack_ms):
                 or end * 1000 > duration + slack_ms):
             raise ValueError('Invalid transcription timestamps.')
         # Whisper rounds timestamps (a 299,974 ms chunk ended at 299,979.8 ms): clamp tiny overshoots.
-        start, end = max(start, previous_end), min(end, duration / 1000)
+        start, end = min(max(start, previous_end), duration / 1000), min(end, duration / 1000)
         end = max(end, start)
         previous_end = end
         current.append({'text': text.strip(), 'start_ms': round(start * 1000), 'end_ms': round(end * 1000),
@@ -304,7 +276,6 @@ def _sarvam_segments(path, duration):
 
 
 def transcribe_segments(chunks: list[str], language: str = 'english') -> list[dict]:
-    import math
     if language not in ('english', 'hinglish'):
         raise ValueError('Unsupported transcription language')
     offset = 0

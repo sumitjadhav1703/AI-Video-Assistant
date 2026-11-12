@@ -7,7 +7,6 @@ import subprocess
 import tempfile
 from urllib.parse import parse_qs, urlsplit
 
-import yt_dlp
 
 from ..core.telemetry import duration, local_size, metric
 
@@ -80,11 +79,13 @@ def validate_youtube_url(url: str) -> str:
 
 
 def download_youtube_audio(url: str) -> str:
+    import yt_dlp  # 26 MiB import; only the CLI path downloads, the API rejects URLs
     url = validate_youtube_url(url)
-    max_bytes = int(os.getenv("MAX_DOWNLOAD_MB", "").strip() or "25") * 1024 * 1024
+    max_bytes = min(int(os.getenv("MAX_DOWNLOAD_MB", "").strip() or "25"), 25) * 1024 * 1024
     if max_bytes <= 0:
         raise ValueError("MAX_DOWNLOAD_MB must be positive.")
-    directory = tempfile.mkdtemp(prefix="avassist_download_")
+    # realpath: macOS mkdtemp returns /var/... while realpath(filename) is /private/var/...
+    directory = os.path.realpath(tempfile.mkdtemp(prefix="avassist_download_"))
 
     def limit_download(status):
         if (status.get("downloaded_bytes") or 0) > max_bytes:
