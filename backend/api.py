@@ -290,6 +290,12 @@ def health():
     return {'status': 'ok'}
 
 
+@app.get('/ready')
+def ready():
+    _database_call(db.check_ready)
+    return {'status': 'ok'}
+
+
 @app.get('/demo-mode')
 def get_demo_mode():
     try:

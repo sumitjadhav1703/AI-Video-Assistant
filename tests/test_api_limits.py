@@ -31,6 +31,25 @@ class APILimitTests(unittest.TestCase):
         self.preflight.stop()
         self.env.stop()
 
+    def test_readiness_checks_database_and_vector_operation(self):
+        with patch.object(api.db, 'connect') as connect:
+            cursor = connect.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value
+            response = self.client.get('/ready')
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json(), {'status': 'ok'})
+            cursor.execute.assert_called_once()
+            self.assertIn('::vector', cursor.execute.call_args.args[0])
+
+    def test_readiness_masks_database_errors_and_liveness_is_independent(self):
+        with patch.object(api.db, 'connect', side_effect=RuntimeError('postgresql://secret@host')) as connect:
+            with self.assertLogs('backend.api', level='WARNING') as logs:
+                response = self.client.get('/ready')
+            self.assertEqual(response.status_code, 503)
+            self.assertEqual(response.json(), {'detail': api._UNAVAILABLE})
+            self.assertNotIn('secret', '\n'.join(logs.output))
+            self.assertEqual(self.client.get('/health').status_code, 200)
+            connect.assert_called_once()
+
     def test_authentication_and_invitation_before_parsing_or_preflight(self):
         with patch.dict(os.environ, {'DEMO_LIVE_MODE': 'invited', 'DEMO_INVITE_CODE': 'i' * 32}), patch.object(api, 'preflight_pipeline') as preflight, patch.object(api.db, 'get_job_status') as lookup:
             response = self.client.post('/jobs', content=b'invalid')

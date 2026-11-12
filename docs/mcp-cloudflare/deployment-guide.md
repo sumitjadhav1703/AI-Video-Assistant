@@ -29,14 +29,21 @@ VALUES ('fixture-video', 0, 'Synthetic transcript excerpt.', 0, 1000, 'segment')
 
 Set `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` in the local environment to its fixture reader DSN, then start `npm run dev`. Connect MCP Inspector over Streamable HTTP to `http://127.0.0.1:8787/mcp` and add the local token as a bearer header. Read the token from the protected file into the client without printing it. Use the fixture reader login for the Worker connection. Dispose of the local test instance when finished. [Hyperdrive local development](https://developers.cloudflare.com/hyperdrive/configuration/local-development/) · [MCP Inspector](https://github.com/modelcontextprotocol/inspector)
 
-## Proposed production database changes
+## One-time production database setup
 
-Use the existing Neon database and confirm the actual schema names, columns, and retrieval version before preparing SQL for approval. The tested [fixture SQL](../../mcp-server/tests/fixture.sql) defines the view contract. For production, use `ava_mcp` and point the views at the verified application tables.
+Use the approved sample Neon database after the backend has initialized `public.jobs` and `public.transcript_chunks`. If the database is new, the app database owner can run `python -c 'from backend.db import init_db; init_db()'` from the audited checkout with the intended Neon connection supplied as `DATABASE_URL` through the shell's protected environment. Verify the database identity before running the command.
 
-1. Create `ava_mcp.shares` with a unique source job ID referencing `jobs.id ON DELETE CASCADE`, a unique random UUID alias, and `content_approved boolean NOT NULL DEFAULT false`. Keep the table accessible only to the database operator and the view owner. Insert a new UUID when resharing. Review the stored content before approving it.
-2. Create the two security-barrier views using the fixture projections and caps. Join against shares for both views. The private view owner needs `USAGE` on the relevant schemas and column-level `SELECT` on only the columns used in the joins, filters, and projections. Remove its schema creation grant after assigning ownership.
-3. Create a SQL login named `ava_mcp_reader` with a privately generated password, no elevated role memberships, and `statement_timeout = '2s'`. Grant it database `CONNECT`, schema `USAGE` on `ava_mcp`, and `SELECT` on its two views. Check effective grants inherited from `PUBLIC` and test both successful reads and denied base-table reads and writes as the actual login.
-4. If access needs immediate revocation, disable the Worker endpoint, revoke view grants and login, and terminate any remaining reader connections. Remove the two views and share table only after the Worker has stopped using them. Review the rollback with the database owner before applying it.
+Review [the setup SQL](../../mcp-server/setup-production.sql) against the deployed schema. Execute it once from an authenticated `psql` session as the owner of the application tables with permission to create roles. The transaction fails if the production roles or schema already exist. Review an existing installation with the database owner before making changes.
+
+```sql
+\i mcp-server/setup-production.sql
+\password ava_mcp_reader
+ALTER ROLE ava_mcp_reader LOGIN;
+```
+
+The view owner has NOLOGIN and column-level access to the required tables. The reader has SELECT on the two security-barrier views. Verify effective permissions as the actual reader, including PUBLIC grants. `SELECT job_id FROM ava_mcp.shared_jobs LIMIT 1` should work on an empty database. A base-table read, view write, and direct read of `ava_mcp.shares` should be denied. Leave the shares table empty until the owner reviews and explicitly approves content. The foreign key removes aliases when the job is deleted.
+
+Create a production Hyperdrive configuration that uses only this reader, the direct Neon endpoint with verified TLS, and query caching disabled. The SQL runs once during platform setup. Repository pushes deploy the Worker against that existing binding.
 
 ## Cloud account checks
 
@@ -58,9 +65,10 @@ npx wrangler preview secret put MCP_BEARER_TOKEN --name mcp-validation
 
 ## Production
 
-1. After separate approval for live DDL, review the database ownership, eligibility predicate, backing-table grants, reader grants, and rollback with the database owner. Apply the reviewed proposal under the approved database identity and run read-only checks as the actual reader. Create a distinct production Hyperdrive configuration using the least-privilege login and disable query caching.
-2. After production approval, configure the top-level Wrangler bindings and variables with the verified production Hyperdrive ID, rate-limit namespace, `MCP_ENVIRONMENT=production`, and the exact production hostname. Configure the production route and production token for `ai-video-assistant-mcp`. Stage the token with the dashboard or Wrangler versions workflow. Direct `wrangler secret put` can create and deploy a version.
-3. Run `npm run build`, review the deployment settings, then run `npx wrangler deploy` using the verified target. Confirm the active deployment and run the bounded owner-client smoke test. Record the version, hostname, route, environment, and outcome without private data or credentials.
-4. To contain a bad release, disable the affected route or Preview. For an eligible production rollback, select the prior version for this Worker and verify its hostname, auth policy, secret, and bindings. Rollback leaves connected database resources on their current state.
+1. Use the dedicated Worker `ai-video-assistant-mcp`. Set up its stable workers.dev hostname `ai-video-assistant-mcp.<account-subdomain>.workers.dev`. The repository workflow manages this workers.dev target. Keep an independent Workers Builds Git deployment disabled so GitHub Actions controls release order.
+2. After setting up the reader and Hyperdrive, set `CLOUDFLARE_ACCOUNT_ID`, `MCP_HOSTNAME`, and `MCP_HYPERDRIVE_ID` in the GitHub release environment. Store the Cloudflare deployment API token in the environment's `CLOUDFLARE_API_TOKEN` secret. Use the narrowest available token scope for the target account.
+3. Set `MCP_BEARER_TOKEN` on the Worker using Cloudflare's secret store. Add the same value as `MCP_SMOKE_TOKEN` in the GitHub release environment. Use a canonical base64url encoding of 32 random bytes. Confirm the first deployment will retain the secret before enabling the release workflow. Direct Wrangler secret changes can create and deploy a version.
+4. The main release workflow deploys the pinned Wrangler package against the supplied binding. It records the active deployment and Worker version and performs a bounded read-only MCP smoke check. Keep the separate synthetic Preview disabled for automated releases.
+5. To contain a bad release, disable the affected route. For an eligible rollback, select the prior version for this Worker and verify its hostname, auth policy, secret, and bindings. Rollback leaves connected database resources on their current state. If database access needs immediate revocation, revoke the reader login and grants and terminate its remaining sessions.
 
 [Cloudflare Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/) · [Cloudflare rollbacks](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/)

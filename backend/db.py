@@ -41,6 +41,11 @@ def connect():
                            options="-c statement_timeout=15000 -c lock_timeout=5000")
 
 
+def check_ready() -> None:
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT '[0]'::vector <-> '[0]'::vector")
+
+
 SCHEMA = """
 CREATE EXTENSION IF NOT EXISTS vector;
 
