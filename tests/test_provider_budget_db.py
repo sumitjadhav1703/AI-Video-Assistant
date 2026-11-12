@@ -62,7 +62,8 @@ class ProviderBudgetDatabaseTests(unittest.TestCase):
         self.route.rpm = 1
         db.create_job('first','english')
         reserve_attempt('first',self.route,100,20)
-        db.delete_job_row('first')
+        db.fail_job('first', 'synthetic failure')
+        db.delete_job('first')
         with self.assertRaises(LimitExceeded):
             reserve_attempt('second',self.route,100,20)
         with db.connect() as conn:
@@ -93,7 +94,8 @@ class ProviderBudgetDatabaseTests(unittest.TestCase):
                 return False
         with ThreadPoolExecutor(max_workers=6) as executor:
             self.assertEqual(sum(executor.map(reserve, range(6))), 1)
-        db.delete_job_row('paid')
+        db.fail_job('paid', 'synthetic failure')
+        db.delete_job('paid')
         with self.assertRaises(RouteQuotaExceeded):
             reserve_attempt('paid', route, 100, 20)
         with db.connect() as conn:

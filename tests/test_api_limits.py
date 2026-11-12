@@ -31,6 +31,25 @@ class APILimitTests(unittest.TestCase):
         self.preflight.stop()
         self.env.stop()
 
+    def test_readiness_checks_database_and_vector_operation(self):
+        with patch.object(api.db, 'connect') as connect:
+            cursor = connect.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value
+            response = self.client.get('/ready')
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json(), {'status': 'ok'})
+            cursor.execute.assert_called_once()
+            self.assertIn('::vector', cursor.execute.call_args.args[0])
+
+    def test_readiness_masks_database_errors_and_liveness_is_independent(self):
+        with patch.object(api.db, 'connect', side_effect=RuntimeError('postgresql://secret@host')) as connect:
+            with self.assertLogs('backend.api', level='WARNING') as logs:
+                response = self.client.get('/ready')
+            self.assertEqual(response.status_code, 503)
+            self.assertEqual(response.json(), {'detail': api._UNAVAILABLE})
+            self.assertNotIn('secret', '\n'.join(logs.output))
+            self.assertEqual(self.client.get('/health').status_code, 200)
+            connect.assert_called_once()
+
     def test_authentication_and_invitation_before_parsing_or_preflight(self):
         with patch.dict(os.environ, {'DEMO_LIVE_MODE': 'invited', 'DEMO_INVITE_CODE': 'i' * 32}), patch.object(api, 'preflight_pipeline') as preflight, patch.object(api.db, 'get_job_status') as lookup:
             response = self.client.post('/jobs', content=b'invalid')
@@ -95,7 +114,7 @@ class APILimitTests(unittest.TestCase):
             artifact = dict(status='done', title='synthetic', transcript='test transcript', summary='',
                             action_items='', key_decisions='', open_questions='')
             with patch.object(api.db, 'get_job_status', return_value={'status': 'done', 'step': 'rag', 'error': None}) as status, \
-                    patch.object(api.db, 'get_job', return_value=artifact) as result, patch.object(api.db, 'begin_delete') as delete, \
+                    patch.object(api.db, 'get_job', return_value=artifact) as result, patch.object(api.db, 'delete_job') as delete, \
                     patch.object(api.db, 'reserve_chat', return_value='chat-slot') as chat, \
                     patch.object(api.db, 'release_slot'), patch.object(api, 'load_rag_chain') as load, \
                     patch.object(api, 'ask_question', return_value={'answer': 'twelve', 'abstained': False, 'citations': []}):
@@ -167,6 +186,18 @@ class APILimitTests(unittest.TestCase):
         self.assertEqual(response.status_code, 429)
         self.assertEqual(response.headers['Retry-After'], '45')
 
+    def test_pinned_embedding_unavailability_returns_retryable_503(self):
+        from backend.core.embedding_routes import EmbeddingRetryable
+
+        with patch.object(api.db, 'reserve_chat', return_value='owner'), \
+                patch.object(api.db, 'release_slot') as release, patch.object(api, 'load_rag_chain'), \
+                patch.object(api, 'ask_question', side_effect=EmbeddingRetryable('provider internals')):
+            response = self.client.post('/jobs/' + 'a' * 32 + '/chat', json={'question': 'hello'})
+        self.assertEqual(response.status_code, 503)
+        self.assertTrue(response.headers['Retry-After'].isdigit())
+        self.assertNotIn('provider internals', response.text)
+        release.assert_called_once_with('chat', 'owner')
+
     def test_job_budget_exhaustion_has_no_retry_after(self):
         from backend.core.provider_budget import JobBudgetExceeded
         with patch.object(api.db, 'reserve_chat', return_value='owner'), patch.object(api.db, 'release_slot'), patch.object(api, 'load_rag_chain', side_effect=JobBudgetExceeded('budget')):
@@ -181,6 +212,34 @@ class APILimitTests(unittest.TestCase):
                 response = self.client.post('/jobs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/chat', json={'question': question})
                 self.assertIn(response.status_code, (400, 422))
         provider.assert_not_called()
+
+    def test_validation_omits_chat_input_but_identifies_invalid_field(self):
+        marker = 'synthetic-private-chat-value'
+        with patch.object(api.db, 'reserve_chat') as reserve, patch.object(api, 'load_rag_chain') as provider:
+            response = self.client.post('/jobs/' + 'a' * 32 + '/chat', json={'question': [marker]})
+        self.assertEqual(response.status_code, 422)
+        self.assertNotIn(marker, response.text)
+        self.assertEqual(response.json()['detail'][0]['loc'], ['body', 'question'])
+        self.assertEqual(response.headers['cache-control'], 'no-store')
+        reserve.assert_not_called()
+        provider.assert_not_called()
+
+    def test_non_ascii_cleanup_credentials_are_unauthorized(self):
+        with patch.object(api, 'ADMIN_TOKEN', 'a' * 32), patch.object(api.db, 'job_ids_older_than') as lookup:
+            client = TestClient(api.app, raise_server_exceptions=False)
+            response = client.post('/admin/cleanup', headers=[(b'x-admin-token', bytes([255]))])
+        self.assertEqual(response.status_code, 401)
+        lookup.assert_not_called()
+
+    def test_cleanup_does_not_report_success_when_a_database_delete_failed(self):
+        from backend.usage_limits import JobBusy
+        with patch.object(api, 'ADMIN_TOKEN', 'a' * 32), \
+                patch.object(api.db, 'job_ids_older_than', return_value=['busy', 'fail', 'ok']), \
+                patch.object(api.db, 'delete_job', side_effect=[JobBusy(), RuntimeError('private details'), None]) as delete:
+            response = self.client.post('/admin/cleanup', headers={'X-Admin-Token': 'a' * 32})
+        self.assertEqual(response.status_code, 503)
+        self.assertNotIn('private details', response.text)
+        self.assertEqual([call.args[0] for call in delete.call_args_list], ['busy', 'fail', 'ok'])
 
     def test_no_untrusted_forwarded_ip_used(self):
         with patch.object(api.db, 'admit_job', return_value='token', create=True) as reserve, patch.object(api, 'run_job', side_effect=lambda job, source, *args, **kwargs: os.remove(source)), patch.object(api.db, 'create_job'):
@@ -235,26 +294,18 @@ class APILimitTests(unittest.TestCase):
         self.assertNotIn('secret', response.text)
         release.assert_called_once_with('chat', 'owner')
 
-    def test_row_delete_failure_after_vector_removal_marks_job_error(self):
-        with patch.object(api.db, 'begin_delete', return_value='done'), patch.object(api, 'delete_vector_store'), patch.object(api.db, 'delete_job_row', side_effect=RuntimeError('secret')), patch.object(api.db, 'restore_after_delete_error') as restore:
-            response = self.client.delete('/jobs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+    def test_delete_database_failure_has_safe_response(self):
+        with patch.object(api.db, 'delete_job', side_effect=RuntimeError('secret')) as delete:
+            response = self.client.delete('/jobs/' + 'a' * 32)
         self.assertEqual(response.status_code, 503)
-        restore.assert_called_once_with('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'error', 'Deletion was interrupted. Please delete this session again.')
         self.assertNotIn('secret', response.text)
-
-    def test_vector_delete_failure_preserves_original_job_status(self):
-        with patch.object(api.db, 'begin_delete', return_value='done'), patch.object(api, 'delete_vector_store', side_effect=RuntimeError('secret')), patch.object(api.db, 'delete_job_row') as delete_row, patch.object(api.db, 'restore_after_delete_error') as restore:
-            response = self.client.delete('/jobs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
-        self.assertEqual(response.status_code, 503)
-        restore.assert_called_once_with('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'done')
-        delete_row.assert_not_called()
+        delete.assert_called_once_with('a' * 32)
 
     def test_rejects_active_delete(self):
         from backend.usage_limits import JobBusy
-        with patch.object(api.db, 'begin_delete', side_effect=JobBusy(), create=True), patch.object(api.db, 'get_job', return_value={'status': 'running'}), patch.object(api, 'delete_vector_store') as delete:
-            response = self.client.delete('/jobs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+        with patch.object(api.db, 'delete_job', side_effect=JobBusy()):
+            response = self.client.delete('/jobs/' + 'a' * 32)
         self.assertEqual(response.status_code, 409)
-        delete.assert_not_called()
 
     def test_multipart_overflow_closes_parser_tempfiles(self):
         opened = []
@@ -340,7 +391,7 @@ class JobSafetyTests(unittest.TestCase):
             media.assert_not_called()
             stt.assert_not_called()
             fail.assert_not_called()
-            scope.assert_called_once_with('owner-job', owner=True, allow_paid=True)
+            scope.assert_called_once_with('owner-job', owner=True, allow_paid=True, local_owner=False)
             transcript, documents = preflight.call_args.args
             self.assertIn('twelve seats', transcript)
             self.assertTrue(all(document.metadata['timing_precision'] == 'unknown' for document in documents))
@@ -412,10 +463,11 @@ class CLIOwnerTests(unittest.TestCase):
                 patch.object(cli, 'ask_question', return_value={'answer': 'twelve'}) as ask:
             cli.main()
         job_id = run.call_args.args[0]
-        run.assert_called_once_with(job_id, None, 'english', reservation_token='processing-slot', owner=True, allow_paid=True)
+        run.assert_called_once_with(job_id, None, 'english', reservation_token='processing-slot',
+                                    owner=True, allow_paid=True, local_owner=True)
         stt.assert_not_called()
         self.assertEqual(chat.call_args.args[0], job_id)
         load.assert_called_once_with(job_id, 'strong')
         ask.assert_called_once_with('chain', cli.OWNER_EVALUATION_QUESTIONS[0])
         self.assertEqual(scope.call_count, 2)
-        scope.assert_called_with(job_id, owner=True, allow_paid=True)
+        scope.assert_called_with(job_id, owner=True, allow_paid=True, local_owner=True)

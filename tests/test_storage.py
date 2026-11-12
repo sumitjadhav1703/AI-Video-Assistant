@@ -33,7 +33,8 @@ class StorageTests(unittest.TestCase):
         self.assertEqual(db.load_chunks('a')[0].page_content,'alice')
         with self.assertRaises(ValueError):db.set_retrieval_config('a','hybrid-v1','other',768)
         with self.assertRaises(ValueError):db.save_chunks('a',[doc(1,'foreign','b')])
-        db.delete_job_row('a')
+        db.fail_job('a', 'synthetic failure')
+        db.delete_job('a')
         self.assertEqual(db.load_chunks('a'),[])
         self.assertEqual(db.load_chunks('b')[0].page_content,'bob')
 

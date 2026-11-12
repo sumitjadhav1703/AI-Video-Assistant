@@ -68,16 +68,14 @@ def preflight_processing(transcript: str, documents) -> dict[str, int]:
     from langchain_core.messages import SystemMessage, HumanMessage
     from .extractor import Findings, FINDINGS_PROMPT
     from .rag_engine import SYSTEM_PROMPT
-    from .vector_store import _embedding_route
-    from .llm_gateway import current_operation, input_token_bound, structured_messages
-    from .provider_budget import forecast_attempts, JobBudgetExceeded
+    from .vector_store import forecast_embeddings
+    from .llm_gateway import input_token_bound, structured_messages
 
     validate_transcript(transcript)
     clean = sanitize_text(transcript)
     if not clean.strip() or not documents:
         raise ValueError('The recording did not contain usable meeting text')
     llm = get_llm()
-    embedding = _embedding_route()
     chunks = split_transcript(clean)
     requests = [(TITLE_PROMPT, clean[:2000], Title, 128)]
     requests += [(MAP_PROMPT, chunk, Summary, 256) for chunk in chunks]
@@ -85,18 +83,10 @@ def preflight_processing(transcript: str, documents) -> dict[str, int]:
                  (FINDINGS_PROMPT, clean, Findings, 1024)]
     generation_stages = [(llm.routes, input_token_bound(structured_messages(prompt, text, schema)), output)
                          for prompt, text, schema, output in requests]
-    attempts = []
-    for start in range(0, len(documents), 100):
-        batch = documents[start:start + 100]
-        sizes = [len(doc.page_content.encode('utf-8')) for doc in batch]
-        if any(not size or size > 2048 for size in sizes):
-            raise JobBudgetExceeded('This recording exceeds the embedding input budget. Use a shorter recording.')
-        attempts.append((embedding, sum(sizes), 0))
     # The API bounds questions at 1000 characters; JSON controls take at most 6 bytes each.
     evidence = [{'chunk_id': doc.metadata['chunk_id'], 'text': doc.page_content} for doc in documents]
     evidence.sort(key=lambda item: len(json.dumps(item, ensure_ascii=False).encode('utf-8')), reverse=True)
     chat = [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=json.dumps(
         {'question': '\x00' * 1000, 'evidence': evidence[:4]}, ensure_ascii=False))]
-    attempts.append((embedding, 2048, 0))
     generation_stages.append((llm.routes, input_token_bound(chat), 1024))
-    return forecast_attempts(current_operation(), attempts, generation_stages=generation_stages)
+    return forecast_embeddings([doc.page_content for doc in documents], generation_stages)

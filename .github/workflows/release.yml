@@ -1,0 +1,148 @@
+name: Validate and release sample stack
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Deploy sample stack
+    needs: checks
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: sample-deployment
+    concurrency:
+      group: ai-video-assistant-sample-stack
+      cancel-in-progress: false
+    env:
+      RELEASE_SHA: ${{ github.sha }}
+    steps:
+      - name: Check deployment switch
+        id: activation
+        env:
+          DEPLOY_SAMPLE_STACK: ${{ vars.DEPLOY_SAMPLE_STACK }}
+        run: |
+          if [[ "$DEPLOY_SAMPLE_STACK" == true ]]; then
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+            printf '### Sample stack release\n\nTested commit `%s`.\n' "$RELEASE_SHA" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Sample deployment disabled. All validation checks passed.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        if: steps.activation.outputs.enabled == 'true'
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        if: steps.activation.outputs.enabled == 'true'
+        with:
+          node-version: '24.14.0'
+          package-manager-cache: false
+
+      - name: Validate sample deployment settings
+        if: steps.activation.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
+          RENDER_URL: ${{ vars.RENDER_URL }}
+          VERCEL_URL: ${{ vars.VERCEL_URL }}
+          CLEANUP_BACKEND_URL: ${{ secrets.BACKEND_URL }}
+          ADMIN_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          MCP_HOSTNAME: ${{ vars.MCP_HOSTNAME }}
+          MCP_HYPERDRIVE_ID: ${{ vars.MCP_HYPERDRIVE_ID }}
+          MCP_SMOKE_TOKEN: ${{ secrets.MCP_SMOKE_TOKEN }}
+        run: |
+          bash scripts/assert_release_head.sh
+          for setting in RENDER_API_KEY RENDER_SERVICE_ID RENDER_URL CLEANUP_BACKEND_URL ADMIN_TOKEN \
+              VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID VERCEL_URL; do
+            if [[ -z "${!setting}" ]]; then
+              echo "::error::Missing sample deployment setting $setting."
+              exit 1
+            fi
+          done
+          if [[ "${CLEANUP_BACKEND_URL%/}" != "${RENDER_URL%/}" ]]; then
+            echo '::error::The scheduled cleanup target must match the configured Render origin.'
+            exit 1
+          fi
+          node scripts/release_worker.mjs --check-config
+          node scripts/release_vercel.mjs --check-target
+
+      - name: Install pinned deployment tools
+        if: steps.activation.outputs.enabled == 'true'
+        env:
+          VERCEL_TELEMETRY_DISABLED: '1'
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          npm install --no-save --no-package-lock --prefix "$RUNNER_TEMP/release-tools" vercel@65.14.0 playwright@1.65.0
+          command -v google-chrome >/dev/null
+          npm ci --prefix mcp-server
+
+      - name: Deploy and verify Render
+        if: steps.activation.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
+          RENDER_URL: ${{ vars.RENDER_URL }}
+        run: |
+          bash scripts/assert_release_head.sh
+          python3 scripts/release_render.py
+
+      - name: Deploy and verify Vercel
+        if: steps.activation.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+          VERCEL_TELEMETRY_DISABLED: '1'
+          RENDER_URL: ${{ vars.RENDER_URL }}
+          VERCEL_URL: ${{ vars.VERCEL_URL }}
+        run: |
+          bash scripts/assert_release_head.sh
+          vercel="$RUNNER_TEMP/release-tools/node_modules/.bin/vercel"
+          "$vercel" pull --yes --environment=production --token "$VERCEL_TOKEN"
+          mkdir -p web/public
+          printf '{"sha":"%s"}\n' "$RELEASE_SHA" > web/public/_ava-release.json
+          VITE_BACKEND_URL="${RENDER_URL%/}" "$vercel" build --prod --token "$VERCEL_TOKEN"
+          bash scripts/assert_release_head.sh
+          VERCEL_DEPLOYMENT_URL=$("$vercel" deploy --prebuilt --prod --token "$VERCEL_TOKEN" --meta "releaseSha=$RELEASE_SHA")
+          export VERCEL_DEPLOYMENT_URL
+          node scripts/release_vercel.mjs
+          AVA_CHROMIUM_EXECUTABLE="$(command -v google-chrome)" \
+            AVA_PLAYWRIGHT_MODULE="$RUNNER_TEMP/release-tools/node_modules/playwright/index.mjs" \
+            AVA_FRONTEND_TEST_URL="$VERCEL_URL" AVA_BACKEND_TEST_URL="$RENDER_URL" node web/tests/sample.browser.mjs
+
+      - name: Deploy and verify Cloudflare Worker
+        if: steps.activation.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          MCP_HOSTNAME: ${{ vars.MCP_HOSTNAME }}
+          MCP_HYPERDRIVE_ID: ${{ vars.MCP_HYPERDRIVE_ID }}
+          MCP_SMOKE_TOKEN: ${{ secrets.MCP_SMOKE_TOKEN }}
+          WRANGLER_SEND_METRICS: 'false'
+        run: |
+          bash scripts/assert_release_head.sh
+          node scripts/release_worker.mjs
+
+      - name: Record interrupted rollout
+        if: failure() && steps.activation.outputs.enabled == 'true'
+        run: echo 'Rollout stopped. Check the failed step and the deployment IDs recorded above. A later passing main push will reconcile the stack.' >> "$GITHUB_STEP_SUMMARY"

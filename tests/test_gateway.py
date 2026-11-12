@@ -191,9 +191,9 @@ class GatewayTests(unittest.TestCase):
         from types import SimpleNamespace
         documents = prepare_documents([{'text': 'Short meeting', 'start_ms': 0, 'end_ms': 1000,
                                         'timing_precision': 'segment'}], 'job-1')
-        embedding = SimpleNamespace(alias='embed', provider='gemini', input_limit_tokens=60000,
+        embedding = SimpleNamespace(alias='embed', provider='gemini', input_limit_tokens=60000, batch_size=100,
                                     rpm=20, tpm=60000, rpd=100)
-        with patch.dict(os.environ, ENV, clear=True), patch('backend.core.vector_store._embedding_route', return_value=embedding), \
+        with patch.dict(os.environ, ENV, clear=True), patch('backend.core.vector_store.available_embedding_routes', return_value=(embedding,)), \
                 patch('backend.core.provider_budget.forecast_attempts') as forecast, gateway.operation_scope('job-1'):
             summarizer.preflight_processing('Short meeting', documents)
         attempts = forecast.call_args.args[1]
@@ -209,9 +209,9 @@ class GatewayTests(unittest.TestCase):
         text = 'x' * 40000
         documents = prepare_documents([{'text': text, 'start_ms': 0, 'end_ms': 1000,
                                         'timing_precision': 'segment'}], 'job-1')
-        embedding = SimpleNamespace(alias='embed', provider='gemini', input_limit_tokens=60000,
+        embedding = SimpleNamespace(alias='embed', provider='gemini', input_limit_tokens=60000, batch_size=100,
                                     rpm=20, tpm=60000, rpd=100)
-        with patch.dict(os.environ, ENV, clear=True), patch('backend.core.vector_store._embedding_route', return_value=embedding), \
+        with patch.dict(os.environ, ENV, clear=True), patch('backend.core.vector_store.available_embedding_routes', return_value=(embedding,)), \
                 patch.object(gateway, '_invoke_route') as network, patch('backend.core.provider_budget.forecast_attempts', side_effect=JobBudgetExceeded('forecast')) as forecast, \
                 gateway.operation_scope('job-1'), self.assertRaises(JobBudgetExceeded):
             summarizer.preflight_processing(text, documents)

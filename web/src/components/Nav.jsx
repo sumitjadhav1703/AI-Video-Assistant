@@ -3,7 +3,7 @@ import { SANS, MONO, CREAM, MUTE, DIM } from '../lib/theme';
 
 // Top navigation: logo, live status, clock, and (when a session is active) a
 // "New session" reset. Nav + veil hide on scroll-down and return on scroll-up.
-export default function Nav({ status, dotActive, dotPulse, showReset, onReset }) {
+export default function Nav({ status, dotActive, dotPulse, showReset, resetDisabled, onReset }) {
   const navRef = useRef(null);
   const veilRef = useRef(null);
   const [clock, setClock] = useState('');
@@ -67,6 +67,7 @@ export default function Nav({ status, dotActive, dotPulse, showReset, onReset })
       />
       <div
         ref={navRef}
+        className="minutes-nav"
         style={{
           position: 'fixed',
           top: 16,
@@ -128,6 +129,7 @@ export default function Nav({ status, dotActive, dotPulse, showReset, onReset })
               Minutes
             </span>
             <span
+              className="minutes-nav-subtitle"
               style={{
                 fontFamily: MONO,
                 fontSize: 11,
@@ -140,6 +142,7 @@ export default function Nav({ status, dotActive, dotPulse, showReset, onReset })
             </span>
           </div>
           <div
+            className="minutes-nav-actions"
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -150,7 +153,7 @@ export default function Nav({ status, dotActive, dotPulse, showReset, onReset })
               color: MUTE,
             }}
           >
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <span className="minutes-nav-status" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
               <span
                 style={{
                   width: 5,
@@ -163,11 +166,12 @@ export default function Nav({ status, dotActive, dotPulse, showReset, onReset })
               />
               {status}
             </span>
-            <span style={{ minWidth: 96, textAlign: 'right' }}>{clock}</span>
+            <span className="minutes-nav-clock" style={{ minWidth: 96, textAlign: 'right' }}>{clock}</span>
             {showReset && (
               <button
                 data-hov="1"
                 data-mag="1"
+                disabled={resetDisabled}
                 onClick={onReset}
                 style={{
                   background: 'none',

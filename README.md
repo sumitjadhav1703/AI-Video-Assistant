@@ -14,7 +14,9 @@
 
 AI Video Assistant transcribes uploaded clips, extracts findings, and answers questions using the transcript. The React/Vite frontend runs on Vercel and the FastAPI backend runs on Render.
 
-The recruiter demo includes a static sample with prepared answers and seekable citations. Live English clip analysis supports invited and public access. It defaults to sample-only mode. See the [recruiter demo guide](docs/RECRUITER_DEMO.md) for configuration, verification, and release gates.
+Minutes opens at `/`. Upload an English clip or pick a bundled demo video. Results show chat beside the summary and findings on desktop, chat first on mobile, and a collapsed transcript below. The offline recruiter demo at `/sample` includes prepared answers and seekable citations. Live analysis supports invited and public access and is disabled in sample mode. See the [recruiter demo guide](docs/RECRUITER_DEMO.md) for configuration, verification, and release gates.
+
+For handoff, open `~/Projects/AI-Video-Assistant` and start with [AGENTS.md](AGENTS.md). [PR #4](https://github.com/sumitjadhav1703/AI-Video-Assistant/pull/4) tracks the pending release from `ci/sample-stack`.
 
 ## Local hybrid retrieval upgrade
 
@@ -22,9 +24,9 @@ New jobs use timestamped, sanitized chunks. Dense pgvector and BM25 retrieve ten
 
 ## Local safety controls
 
-The local branch adds admission controls; this does not describe a verified new deployment. See [the reviewed upgrade plan](UPGRADE_IMPLEMENTATION_PLAN.md) for the full roadmap and [independent architecture review](docs/reviews/architecture-review.md) for limitations.
+The current checkout includes admission controls. [Roadmap status](docs/ROADMAP_STATUS.md) records the remaining release gates and [the architecture review](docs/reviews/architecture-review.md) covers design limitations.
 
-Remote inference defaults to **off** (`ENABLE_PROVIDER_CALLS=false`). Verify the free entitlements and billing controls for the exact STT, generation, and embedding routes before enabling it. Configure private `RATE_LIMIT_SECRET` and `JOB_TOKEN_SECRET` values. Live demo requests use English file uploads and one approved route per operation.
+Remote inference defaults to **off** (`ENABLE_PROVIDER_CALLS=false`). Verify free entitlements and billing controls for the exact STT, generation, and embedding routes before enabling it. Configure private `RATE_LIMIT_SECRET` and `JOB_TOKEN_SECRET` values. Live demo requests use English file uploads. Indexing can fall back to another verified embedding provider on a transient failure and then pins the successful route for chat.
 
 Default policy:
 
@@ -42,11 +44,11 @@ The server uses the connection address, never arbitrary forwarded headers. Verif
 
 ### Tests and local-only development
 
-Use Python 3.11 in a virtual environment. Install `backend/requirements.lock` (includes `httpx` for API tests), then run `python -m unittest discover -s tests -v`. In `web/`, use Node 22 or 24, then run `npm ci`, `npm test`, and `npm run build`. Tests mock providers and never require real credentials. Database integration tests require `TEST_DATABASE_URL` pointing to a disposable **local** Postgres database; they use an isolated schema and do not need pgvector. See the test module for the supported invocation. Point `VITE_BACKEND_URL` at `http://localhost:8000` during development; do not use a hosted backend for routine checks.
+Use Python 3.11 in a virtual environment. Install `backend/requirements.lock`, then run `PYTHON_DOTENV_DISABLED=1 python -m unittest discover -s tests -v`. Set `TEST_DATABASE_URL` to a disposable loopback PostgreSQL database with pgvector to run the database suite. In `web/`, use Node 22 or 24, then run `npm ci`, `npm test`, and `npm run build`. Tests mock providers. Point `VITE_BACKEND_URL` at `http://127.0.0.1:8000` during development.
 
 ### Interrupted jobs and recovery
 
-Closing a tab leaves processing in progress. A refresh in the same tab resumes the status view. Explicit deletion during active work returns `409`. Cleanup skips active jobs and keeps records when vector deletion fails. Deletion and cleanup preserve usage counters.
+Closing a tab leaves processing in progress. A refresh in the same tab resumes the status view. Explicit deletion during active work returns `409`. Explicit deletion and scheduled cleanup remove the job, chunks, and vector collection in one transaction. They skip active jobs and preserve usage counters.
 
 Uncertain processing or chat work retains its reservation. Stop all old workers and suspend admissions before using `python -m backend.recover inspect` in a private terminal. The [recovery runbook](docs/ROADMAP_STATUS.md#recovery-after-an-interrupted-process) describes the 30-minute minimum age and exact owner-token check. Recovery marks an active job `interrupted` and preserves its consumed quotas. Users retry by starting a new analysis.
 
@@ -88,7 +90,7 @@ flowchart TD
     subgraph External_Services ["🌐 External APIs & Services"]
         direction TB
         Groq["⚡ Groq API (English)"]:::external
-        Gemini["Gemini (768-dimensional embeddings)"]:::external
+        Embeddings["Configured free embedding route"]:::external
         LiteLLM["LiteLLM (approved free generation route)"]:::external
         Neon[("🐘 Neon Postgres (pgvector)")]:::database
     end
@@ -112,7 +114,7 @@ flowchart TD
 
     Transcriber -.->|"Whisper"| Groq
     LLMEngine -.->|"Summarize/Extract"| LiteLLM
-    RAGEngine -.->|"Embeddings"| Gemini
+    RAGEngine -.->|"Embeddings"| Embeddings
     RAGEngine -.->|"Grounded answer"| LiteLLM
     JobManager -->|"Status/Results"| Neon
     RAGEngine <-->|"Vector Chunks"| Neon
@@ -135,7 +137,7 @@ flowchart TD
 ### Backend
 - **Framework:** FastAPI, Uvicorn
 - **Audio Processing:** yt-dlp, streaming FFmpeg, pydub
-- **AI/LLM:** LangChain LCEL, LiteLLM, Gemini embeddings, Groq and optional Sarvam STT, BM25, FlashRank and ONNX Runtime
+- **AI/LLM:** LangChain LCEL, LiteLLM, verified free embedding routes, Groq and optional Sarvam STT, BM25, FlashRank and ONNX Runtime
 - **Database & Vectors:** Neon (Serverless Postgres), pgvector, SQLAlchemy
 
 ### Frontend
@@ -161,12 +163,12 @@ Copy the example environment file and fill in your actual credentials.
 **Never commit your `.env` file to version control.**
 
 ```bash
-cp .env.example .env
+test -f .env || cp .env.example .env
 ```
 
 Ensure `.env` contains:
 - `DATABASE_URL`
-- `LLM_ROUTES_JSON`, `STT_PROFILES_JSON`, provider keys and Gemini embedding limits only after account verification
+- `LLM_ROUTES_JSON`, `STT_PROFILES_JSON`, `EMBEDDING_ROUTES_JSON` and provider keys after account verification. See the [local PostgreSQL and provider setup](docs/HYBRID_IMPLEMENTATION.md#local-setup).
 - `FRONTEND_ORIGIN` (Optional for local dev, needed for production CORS)
 - `MAX_UPLOAD_MB` (optional, defaults to `10`; the recruiter demo ceiling is 10 MiB)
 - `ENABLE_PROVIDER_CALLS`, `RATE_LIMIT_SECRET`, and the quota controls documented above (see `.env.example`)
@@ -174,25 +176,25 @@ Ensure `.env` contains:
 - `MAX_MEDIA_SECONDS` (optional, defaults to `120`; the recruiter demo ceiling is two minutes)
 - `ADMIN_TOKEN` (Optional — enables the token-gated `/admin/cleanup` endpoint; unset means the endpoint stays disabled)
 
-### 2. Backend Setup (Docker recommended)
+### 2. Backend setup
 
-The easiest way to run the backend locally with all system dependencies (like `ffmpeg`) is using Docker.
+For a native development server, follow the [loopback PostgreSQL setup](docs/HYBRID_IMPLEMENTATION.md#local-setup) and run the commands below from the repository root. Install `ffmpeg` separately.
+
+```bash
+python3.11 -m venv .venv
+.venv/bin/python -m pip install -r backend/requirements.lock
+.venv/bin/python scripts/prepare_reranker.py
+.venv/bin/python -m uvicorn backend.api:app --host 127.0.0.1 --port 8000 --reload --no-access-log
+```
+
+The Docker image includes `ffmpeg` and the reranker. For a containerized development server, configure `DATABASE_URL` with a database hostname reachable from inside the container. The loopback DSN from the native setup points to the backend container itself when used in Docker.
 
 ```bash
 # Build the Docker image
 docker build -t ai-video-backend .
 
 # Run the container (reads from your .env file)
-docker run -p 8000:8000 --env-file .env ai-video-backend
-```
-
-*Alternatively, run natively (from the repo root — the backend is a package, so
-`backend.api` is the correct import path):*
-```bash
-pip install -r backend/requirements.lock
-python scripts/prepare_reranker.py
-# Ensure ffmpeg is installed via your OS package manager (e.g. brew install ffmpeg)
-uvicorn backend.api:app --host 0.0.0.0 --port 8000 --reload --no-access-log
+docker run -p 127.0.0.1:8000:8000 --env-file .env ai-video-backend
 ```
 
 ### 3. Frontend Setup
@@ -201,21 +203,17 @@ In a separate terminal, install and run the React frontend.
 
 ```bash
 cd web
-npm install
-npm run dev
+npm ci
+npm run dev -- --host 127.0.0.1
 ```
 
-The dev server runs at `http://localhost:5173`. It proxies API calls to the
-backend and, by default, targets the local backend. To point it at a different backend (e.g. another one at
-`http://localhost:8000`), set `VITE_BACKEND_URL` in `web/.env` (see
-`web/.env.example`). The Vite dev proxy routes browser requests through the dev
-server, so local development never trips the backend's CORS allow-list.
+Open `http://127.0.0.1:5173/` or `http://127.0.0.1:5173/sample`. Vite proxies API calls to `http://localhost:8000` by default. Set `VITE_BACKEND_URL=http://127.0.0.1:8000` in `web/.env` to use an IPv4 loopback backend explicitly. See `web/.env.example`.
 
 ---
 
 ## ☁️ Deployment Strategy
 
-The 512 MiB Linux container benchmark and provider account checks gate deployment. See the [benchmark notes](docs/BENCHMARK_NOTES.md).
+Use the [sample deployment runbook](docs/SAMPLE_DEPLOYMENT.md) for Render, Vercel, Neon, Cloudflare, and GitHub setup. Native AMD64 workload and exact-image scan results gate the sample deployment. Provider account checks gate live inference separately.
 
 - **Backend:** The existing **Render Free** service runs FastAPI using the provided `Dockerfile`. It processes uploads in background tasks after admission.
 - **Frontend:** Deploy the `web/` React app to **Vercel** — import the repo, set **Root Directory** to `web` (framework auto-detects as Vite), and add **`VITE_BACKEND_URL`** = the backend URL. Then add the resulting Vercel origin to the backend's `FRONTEND_ORIGIN` (comma-separated, **no trailing slash**) so CORS admits it.
@@ -228,7 +226,7 @@ The 512 MiB Linux container benchmark and provider account checks gate deploymen
 
 Job transcripts, summaries, findings, and vectors live in Neon until explicit deletion or scheduled cleanup.
 
-- **Delete session** removes the job and its vector collection. Closing or refreshing the tab leaves the job available.
+- **New session** deletes the previous job, transcript chunks, and vector collection. Closing or refreshing the tab leaves the job available.
 - **Scheduled cleanup** sweeps eligible terminal jobs 24 hours after their last update. It skips jobs with active work.
 
 To purge on demand, call the endpoint directly (never commit the token or paste it in chat):

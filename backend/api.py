@@ -11,6 +11,7 @@ from typing import Literal
 
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 from starlette._utils import get_route_path
@@ -24,10 +25,11 @@ from .core.audio_budget import profile_for_language
 from .core.provider_budget import JobBudgetExceeded
 from .core.reranker import load_ranker
 from .core.retrieval import RetrievalUnavailable
+from .core.embedding_routes import EmbeddingRouteUnavailable
 from .core.guardrails import sanitize_text, GuardrailError
 from .core.llm_gateway import operation_scope, get_llm
 from .core.telemetry import metric
-from .core.vector_store import delete_vector_store, get_embeddings
+from .core.vector_store import get_embeddings
 from .usage_limits import Settings, client_key, require_provider_calls, LimitExceeded, JobBusy, JobUnavailable
 
 load_dotenv()
@@ -204,6 +206,32 @@ app = FastAPI(title='AI Video Assistant', lifespan=lifespan)
 app.add_middleware(RequestLimitsMiddleware)
 
 
+_VALIDATION_MESSAGES = {
+    ('body', 'question'): 'Enter a question with 1 to 1,000 characters.',
+    ('body', 'tier'): 'Choose economy or strong.',
+    ('body', 'language'): 'Choose english or hinglish.',
+    ('body', 'file'): 'Provide an uploaded file.',
+    ('body', 'youtube_url'): 'Provide the YouTube URL as text.',
+    ('body', 'demo_acknowledged'): 'Use true or false for the privacy acknowledgement.',
+    ('query', 'older_than_days'): 'Provide a whole number of days.',
+}
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(_request: Request, error: RequestValidationError):
+    # Pydantic errors can include the original input, exception context and input keys.
+    details = []
+    for item in error.errors():
+        location = tuple(item.get('loc', ()))
+        message = _VALIDATION_MESSAGES.get(location)
+        details.append({
+            'type': item['type'],
+            'loc': list(location) if message else [],
+            'msg': message or 'Check the request format and required fields.',
+        })
+    return JSONResponse({'detail': details}, status_code=422)
+
+
 def allowed_origins() -> list[str]:
     raw = os.getenv('FRONTEND_ORIGIN', '').strip()
     return [o.strip() for o in raw.split(',') if o.strip()] if raw else ['http://localhost:5173']
@@ -260,6 +288,12 @@ def _release_slot(name, token):
 
 @app.get('/health')
 def health():
+    return {'status': 'ok'}
+
+
+@app.get('/ready')
+def ready():
+    _database_call(db.check_ready)
     return {'status': 'ok'}
 
 
@@ -413,6 +447,9 @@ def job_chat(job_id: str, body: ChatRequest, request: Request):
         raise HTTPException(429, str(error), headers={'Retry-After': str(error.retry_after)}) from None
     except JobBudgetExceeded:
         raise HTTPException(409, 'This job has reached its processing budget. Start a new job with a shorter recording.') from None
+    except EmbeddingRouteUnavailable:
+        raise HTTPException(503, 'This session’s embedding service is unavailable. Please try again later.',
+                            headers={'Retry-After': '60'}) from None
     except RetrievalUnavailable:
         raise HTTPException(503, 'This session cannot be searched. Please create a new session.') from None
     except Exception as error:
@@ -422,28 +459,9 @@ def job_chat(job_id: str, body: ChatRequest, request: Request):
         _release_slot('chat', token)
 
 
-def _delete_job(job_id):
-    previous = _database_call(db.begin_delete, job_id)
-    vectors_deleted = False
-    try:
-        delete_vector_store(job_id)
-        vectors_deleted = True
-        db.delete_job_row(job_id)
-    except Exception as error:
-        logger.warning('job deletion failed: %s', type(error).__name__)
-        try:
-            if vectors_deleted:
-                db.restore_after_delete_error(job_id, 'error', 'Deletion was interrupted. Please delete this session again.')
-            else:
-                db.restore_after_delete_error(job_id, previous)
-        except Exception:
-            pass
-        raise HTTPException(503, _UNAVAILABLE) from None
-
-
 @app.delete('/jobs/{job_id}')
 def delete_job(job_id: str):
-    _delete_job(job_id)
+    _database_call(db.delete_job, job_id)
     return {'job_id': job_id, 'deleted': True}
 
 
@@ -451,15 +469,19 @@ def delete_job(job_id: str):
 def admin_cleanup(older_than_days: int = 1, x_admin_token: str | None = Header(default=None)):
     if not ADMIN_TOKEN:
         raise HTTPException(503, 'Cleanup is disabled — set ADMIN_TOKEN to enable it.')
-    if not x_admin_token or not hmac.compare_digest(x_admin_token, ADMIN_TOKEN):
+    if not x_admin_token or not hmac.compare_digest(x_admin_token.encode('latin-1'), ADMIN_TOKEN.encode('utf-8')):
         raise HTTPException(401, 'Invalid or missing admin token.')
     if older_than_days < 0:
         raise HTTPException(400, 'older_than_days must be >= 0.')
     deleted = 0
+    failed = False
     for job_id in _database_call(db.job_ids_older_than, older_than_days):
         try:
-            _delete_job(job_id)
+            _database_call(db.delete_job, job_id)
             deleted += 1
-        except HTTPException:
-            logger.warning('cleanup skipped a busy or unavailable job')
+        except HTTPException as error:
+            if error.status_code not in (404, 409):
+                failed = True
+    if failed:
+        raise HTTPException(503, 'Cleanup was incomplete. Please retry.')
     return {'deleted': deleted, 'older_than_days': older_than_days}

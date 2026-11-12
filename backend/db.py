@@ -41,6 +41,11 @@ def connect():
                            options="-c statement_timeout=15000 -c lock_timeout=5000")
 
 
+def check_ready() -> None:
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT '[0]'::vector <-> '[0]'::vector")
+
+
 SCHEMA = """
 CREATE EXTENSION IF NOT EXISTS vector;
 
@@ -90,6 +95,7 @@ SCHEMA += """
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS retrieval_version TEXT NOT NULL DEFAULT 'legacy';
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS embedding_model TEXT;
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS embedding_dimension INTEGER;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS embedding_route TEXT;
 CREATE TABLE IF NOT EXISTS transcript_chunks (
     chunk_id TEXT PRIMARY KEY,
     job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
@@ -115,26 +121,35 @@ def init_db() -> None:
         conn.commit()
 
 
-def _set_retrieval_config(cur, job_id, retrieval_version, embedding_model, embedding_dimension):
-    cur.execute('SELECT status, retrieval_version, embedding_model, embedding_dimension FROM jobs WHERE id=%s FOR UPDATE', (job_id,))
+def _set_retrieval_config(cur, job_id, retrieval_version, embedding_model, embedding_dimension, embedding_route):
+    from .core.embedding_routes import EMBEDDING_SPACES
+    if retrieval_version != 'hybrid-v1' or EMBEDDING_SPACES.get(embedding_route) != (embedding_model, embedding_dimension):
+        raise ValueError('Unsupported retrieval configuration')
+    cur.execute('''SELECT status, retrieval_version, embedding_model, embedding_dimension, embedding_route
+                   FROM jobs WHERE id=%s FOR UPDATE''', (job_id,))
     row = cur.fetchone()
     if not row:
         raise JobUnavailable('Job not found')
-    requested = (retrieval_version, embedding_model, embedding_dimension)
-    current = (row['retrieval_version'], row['embedding_model'], row['embedding_dimension'])
+    requested = (retrieval_version, embedding_model, embedding_dimension, embedding_route)
+    current_space = (row['embedding_model'], row['embedding_dimension'])
+    current_route = row['embedding_route']
+    if current_route is None and current_space == EMBEDDING_SPACES['gemini-embeddings']:
+        current_route = 'gemini-embeddings'
+    current = (row['retrieval_version'], *current_space, current_route)
     if current != requested and (row['embedding_model'] is not None or row['status'] not in ('queued', 'running')):
         raise ValueError('Embedding configuration is immutable; legacy jobs require reprocessing.')
-    if requested != ('hybrid-v1', 'gemini-embedding-001', 768):
-        raise ValueError('Unsupported retrieval configuration')
-    cur.execute('UPDATE jobs SET retrieval_version=%s, embedding_model=%s, embedding_dimension=%s WHERE id=%s', (*requested, job_id))
+    cur.execute('''UPDATE jobs SET retrieval_version=%s, embedding_model=%s, embedding_dimension=%s,
+                   embedding_route=%s WHERE id=%s''', (*requested, job_id))
 
 
-def set_retrieval_config(job_id, retrieval_version, embedding_model, embedding_dimension):
+def set_retrieval_config(job_id, retrieval_version, embedding_model, embedding_dimension,
+                         embedding_route='gemini-embeddings'):
     with connect() as conn, conn.cursor() as cur:
-        _set_retrieval_config(cur, job_id, retrieval_version, embedding_model, embedding_dimension)
+        _set_retrieval_config(cur, job_id, retrieval_version, embedding_model, embedding_dimension, embedding_route)
 
 
-def save_chunks(job_id, documents):
+def save_chunks(job_id, documents, *, embedding_route='gemini-embeddings'):
+    from .core.embedding_routes import EMBEDDING_SPACES
     from .core.guardrails import sanitize_text
     if not documents:
         raise ValueError('A chunk corpus cannot be empty')
@@ -149,7 +164,7 @@ def save_chunks(job_id, documents):
         rows.append((chunk_id, job_id, ordinal, doc.page_content,
                      metadata.get('start_ms'), metadata.get('end_ms'), metadata.get('timing_precision')))
     with connect() as conn, conn.cursor() as cur:
-        _set_retrieval_config(cur, job_id, 'hybrid-v1', 'gemini-embedding-001', 768)
+        _set_retrieval_config(cur, job_id, 'hybrid-v1', *EMBEDDING_SPACES[embedding_route], embedding_route)
         cur.executemany('''INSERT INTO transcript_chunks (chunk_id,job_id,ordinal,text,start_ms,end_ms,timing_precision)
                            VALUES (%s,%s,%s,%s,%s,%s,%s)''', rows)
 
@@ -232,18 +247,12 @@ def get_job(job_id: str) -> dict | None:
         return cur.fetchone()
 
 
-def delete_job_row(job_id: str) -> None:
-    with connect() as conn, conn.cursor() as cur:
-        cur.execute("DELETE FROM jobs WHERE id=%s", (job_id,))
-        conn.commit()
-
-
 def job_ids_older_than(days: int) -> list[str]:
     """Terminal jobs untouched for at least `days`, excluding active reservations."""
     with connect() as conn, conn.cursor() as cur:
         cur.execute(
             """SELECT id FROM jobs WHERE updated_at < NOW() - make_interval(days => %s)
-               AND status IN ('done', 'error', 'interrupted')
+               AND status IN ('done', 'error', 'interrupted', 'deleting')
                AND NOT EXISTS (SELECT 1 FROM usage_slots WHERE job_id=jobs.id AND owner_token IS NOT NULL)""",
             (days,),
         )
@@ -370,7 +379,29 @@ def recover_slot(name: str, token: str, *, all_workers_stopped: bool) -> None:
                     (name, token))
 
 
-def begin_delete(job_id: str) -> str:
+def collection_for(job_id: str) -> str:
+    if not job_id:
+        raise ValueError('job_id is required — vector stores are never shared across jobs')
+    return f'job_{job_id}'
+
+
+def _delete_collection(cur, job_id: str) -> None:
+    collection = collection_for(job_id)
+    cur.execute("SELECT to_regclass('langchain_pg_collection') AS table_name")
+    if cur.fetchone()['table_name']:
+        cur.execute('DELETE FROM langchain_pg_collection WHERE name=%s', (collection,))
+
+
+def delete_vector_store(job_id: str) -> None:
+    """Discard a failed index while retaining the job record for diagnostics."""
+    with connect() as conn, conn.cursor() as cur:
+        _delete_collection(cur, job_id)
+        cur.execute("SELECT to_regclass('transcript_chunks') AS table_name")
+        if cur.fetchone()['table_name']:
+            cur.execute('DELETE FROM transcript_chunks WHERE job_id=%s', (job_id,))
+
+
+def delete_job(job_id: str) -> None:
     with connect() as conn, conn.cursor() as cur:
         _lock_admission(cur)
         cur.execute("SELECT status FROM jobs WHERE id=%s", (job_id,))
@@ -378,12 +409,8 @@ def begin_delete(job_id: str) -> str:
         if not row:
             raise JobUnavailable('Job not found')
         cur.execute("SELECT 1 FROM usage_slots WHERE job_id=%s AND owner_token IS NOT NULL", (job_id,))
-        if row['status'] in ('queued', 'running', 'deleting') or cur.fetchone():
+        if row['status'] not in ('done', 'error', 'interrupted', 'deleting') or cur.fetchone():
             raise JobBusy('Job is active')
-        cur.execute("UPDATE jobs SET status='deleting', updated_at=NOW() WHERE id=%s", (job_id,))
-        return row['status']
-
-
-def restore_after_delete_error(job_id: str, previous_status: str, message: str | None = None) -> None:
-    with connect() as conn, conn.cursor() as cur:
-        cur.execute("UPDATE jobs SET status=%s, error=COALESCE(%s,error), updated_at=NOW() WHERE id=%s AND status='deleting'", (previous_status, message, job_id))
+        _delete_collection(cur, job_id)
+        # The job's foreign key cascades to transcript_chunks in this transaction.
+        cur.execute("DELETE FROM jobs WHERE id=%s", (job_id,))

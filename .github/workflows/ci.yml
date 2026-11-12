@@ -1,0 +1,195 @@
+name: Validation
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  backend:
+    name: Backend, native AMD64 gate and image scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      IMAGE: ava-ci:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Build exact backend image on native AMD64
+        id: image
+        run: |
+          REPORTS="$RUNNER_TEMP/backend-reports"
+          test "$(uname -m)" = x86_64
+          test "$(docker info --format '{{.CgroupVersion}}')" = 2
+          mkdir -p "$REPORTS"
+          docker build --platform linux/amd64 --pull -t "$IMAGE" . 2>&1 | tee "$REPORTS/build.log"
+          docker image inspect "$IMAGE" --format '{{.Id}} {{.Os}}/{{.Architecture}}' | tee "$REPORTS/image.txt"
+      - name: Run backend suite and strict workload against disposable pgvector
+        run: |
+          REPORTS="$RUNNER_TEMP/backend-reports"
+          cleanup() {
+            docker logs ava-ci-postgres > "$REPORTS/postgres.log" 2>&1 || true
+            docker rm -f ava-ci-workload ava-ci-postgres >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          docker run --rm -d --name ava-ci-postgres --network none \
+            -e POSTGRES_USER=audit -e POSTGRES_DB=recruiter_demo_test \
+            -e POSTGRES_HOST_AUTH_METHOD=trust \
+            pgvector/pgvector:0.8.1-pg16 -c listen_addresses=127.0.0.1
+          for attempt in {1..40}; do
+            if docker exec ava-ci-postgres pg_isready -h 127.0.0.1 -U audit -d recruiter_demo_test; then break; fi
+            sleep 1
+          done
+          docker exec ava-ci-postgres pg_isready -h 127.0.0.1 -U audit -d recruiter_demo_test
+          docker exec ava-ci-postgres createdb -h 127.0.0.1 -U audit ava_backend_test
+          docker run --rm --network container:ava-ci-postgres \
+            -e TEST_DATABASE_URL=postgresql://audit@127.0.0.1:5432/ava_backend_test \
+            -e PYTHON_DOTENV_DISABLED=1 -e PYTHONDONTWRITEBYTECODE=1 \
+            -e ENABLE_PROVIDER_CALLS=false -e LITELLM_LOCAL_MODEL_COST_MAP=True \
+            --mount "type=bind,source=$PWD/tests,target=/app/tests,readonly" \
+            --mount "type=bind,source=$PWD/scripts,target=/app/scripts,readonly" \
+            "$IMAGE" python -m unittest discover -s tests -v 2>&1 | tee "$REPORTS/tests.log"
+          grep -qx 'OK' "$REPORTS/tests.log"
+
+          docker run --rm --network none --user "$(id -u):$(id -g)" \
+            --mount "type=bind,source=$RUNNER_TEMP,target=/fixture" "$IMAGE" \
+            ffmpeg -nostdin -loglevel error -f lavfi -i color=blue:size=640x360:rate=15 \
+              -f lavfi -i sine=frequency=440:sample_rate=48000 -t 120 \
+              -c:v libx264 -pix_fmt yuv420p -c:a aac /fixture/recruiter-benchmark.mp4
+          status=0
+          docker run --name ava-ci-workload --network container:ava-ci-postgres --cgroupns private \
+            --memory 512m --memory-swap 512m --cpus 0.1 \
+            -e TEST_DATABASE_URL=postgresql://audit@127.0.0.1:5432/recruiter_demo_test \
+            --mount "type=bind,source=$PWD/scripts,target=/app/scripts,readonly" \
+            --mount "type=bind,source=$RUNNER_TEMP/recruiter-benchmark.mp4,target=/tmp/recruiter-benchmark.mp4,readonly" \
+            "$IMAGE" python -m scripts.benchmark_recruiter_demo /tmp/recruiter-benchmark.mp4 --linux-gate \
+            > "$REPORTS/workload.json" 2> "$REPORTS/workload.log" || status=$?
+          docker inspect ava-ci-workload --format '{{json .State}}' > "$REPORTS/workload-state.json"
+          cat "$REPORTS/workload.log"
+          cat "$REPORTS/workload.json"
+          test "$status" -eq 0
+          test "$(docker exec ava-ci-postgres psql -h 127.0.0.1 -U audit -d recruiter_demo_test \
+            -At -v ON_ERROR_STOP=1 -c 'SELECT (SELECT count(*) FROM jobs) + (SELECT count(*) FROM transcript_chunks) + (SELECT count(*) FROM langchain_pg_collection) + (SELECT count(*) FROM langchain_pg_embedding)')" = 0
+      - name: Scan OS packages in the exact image
+        if: ${{ !cancelled() && steps.image.outcome == 'success' }}
+        run: |
+          REPORTS="$RUNNER_TEMP/backend-reports"
+          curl --fail --silent --show-error --location --retry 2 \
+            'https://github.com/aquasecurity/trivy/releases/download/v0.76.2/trivy_0.76.2_Linux-64bit.tar.gz' \
+            --output "$RUNNER_TEMP/trivy.tar.gz"
+          echo "bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf  $RUNNER_TEMP/trivy.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/trivy.tar.gz" -C "$RUNNER_TEMP" trivy
+          "$RUNNER_TEMP/trivy" image --image-src docker --scanners vuln --pkg-types os --list-all-pkgs \
+            --format json --output "$REPORTS/trivy-os.json" "$IMAGE" 2>&1 | tee "$REPORTS/trivy.log"
+          jq -e '.Results | any(.Class == "os-pkgs")' "$REPORTS/trivy-os.json"
+          jq -e '[.Results[].Vulnerabilities[]? | select((.Severity == "HIGH" or .Severity == "CRITICAL") and ((.FixedVersion // "") != ""))] | length == 0' "$REPORTS/trivy-os.json"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: backend-validation
+          path: ${{ runner.temp }}/backend-reports
+          retention-days: 14
+
+  frontend:
+    name: Frontend tests and build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.14.0
+          package-manager-cache: false
+      - run: node --test scripts/release_vercel.test.mjs
+      - run: npm ci && npm test && npm run build
+        working-directory: web
+        env:
+          VITE_BACKEND_URL: https://sample-fixture.invalid
+      - name: Verify the prepared sample with the backend blocked
+        working-directory: web
+        env:
+          AVA_BACKEND_TEST_URL: https://sample-fixture.invalid
+          AVA_FRONTEND_TEST_URL: http://127.0.0.1:4173
+        run: |
+          npm install --prefix "$RUNNER_TEMP/ava-playwright" --no-audit --no-fund playwright@1.65.0
+          export AVA_PLAYWRIGHT_MODULE="$RUNNER_TEMP/ava-playwright/node_modules/playwright/index.mjs"
+          export AVA_CHROMIUM_EXECUTABLE="$(command -v google-chrome)"
+          ./node_modules/.bin/vite preview --host 127.0.0.1 --port 4173 --strictPort > "$RUNNER_TEMP/vite-preview.log" 2>&1 &
+          preview_pid=$!
+          trap 'kill "$preview_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent --max-time 2 "$AVA_FRONTEND_TEST_URL" >/dev/null; then break; fi
+            kill -0 "$preview_pid"
+            sleep 1
+          done
+          node tests/sample.browser.mjs
+
+  mcp:
+    name: MCP tests, types and Worker bundle
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      WRANGLER_SEND_METRICS: "false"
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.14.0
+          package-manager-cache: false
+      - run: npm ci && npm run typecheck && npm run build
+        working-directory: mcp-server
+      - run: node --test tests/test_release_worker.mjs
+      - name: Run permissions and local Worker tests
+        working-directory: mcp-server
+        run: |
+          worker_pid=
+          cleanup() {
+            if test -n "$worker_pid"; then kill "$worker_pid" 2>/dev/null || true; fi
+            docker logs ava-ci-mcp-postgres > "$RUNNER_TEMP/mcp-postgres.log" 2>&1 || true
+            docker rm -f ava-ci-mcp-postgres >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          docker run --rm -d --name ava-ci-mcp-postgres \
+            -p 127.0.0.1:55432:5432 -e POSTGRES_USER=audit -e POSTGRES_DB=ava_mcp_test \
+            -e POSTGRES_PASSWORD=ci_test_only postgres:16
+          for attempt in {1..40}; do
+            if docker exec ava-ci-mcp-postgres pg_isready -h 127.0.0.1 -U audit -d ava_mcp_test; then break; fi
+            sleep 1
+          done
+          docker exec ava-ci-mcp-postgres pg_isready -h 127.0.0.1 -U audit -d ava_mcp_test
+          TEST_DATABASE_URL=postgresql://audit:ci_test_only@127.0.0.1:55432/ava_mcp_test \
+            node --test tests/permissions.test.ts
+          cat tests/fixture.sql tests/worker-fixture.sql | docker exec -i ava-ci-mcp-postgres \
+            psql -U audit -d ava_mcp_test -v ON_ERROR_STOP=1
+          token=$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("base64url"))')
+          export CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE=postgresql://ava_mcp_fixture_reader:ci_reader_only@127.0.0.1:55432/ava_mcp_test
+          ./node_modules/.bin/wrangler dev --ip 127.0.0.1 --port 8787 --persist-to "$RUNNER_TEMP/worker-state" \
+            --var MCP_HOSTNAME:127.0.0.1:8787 --var MCP_ENVIRONMENT:preview --var "MCP_BEARER_TOKEN:$token" \
+            > "$RUNNER_TEMP/mcp-worker.log" 2>&1 &
+          worker_pid=$!
+          for attempt in {1..30}; do
+            if test "$(curl --silent --max-time 2 --output /dev/null --write-out '%{http_code}' \
+              -X POST http://127.0.0.1:8787/mcp)" = 401; then break; fi
+            kill -0 "$worker_pid"
+            sleep 1
+          done
+          AVA_MCP_TEST_URL=http://127.0.0.1:8787/mcp AVA_MCP_TEST_TOKEN="$token" \
+            AVA_MCP_TEST_JOB=00000000-0000-4000-8000-000000000001 npm test
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: mcp-validation
+          path: |
+            ${{ runner.temp }}/mcp-postgres.log
+            ${{ runner.temp }}/mcp-worker.log
+          retention-days: 14

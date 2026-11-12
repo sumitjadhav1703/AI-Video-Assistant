@@ -1,6 +1,7 @@
 import glob
 import math
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -18,6 +19,8 @@ CHUNK_MINUTES = 5
 # already rely on it; resolve from PATH with a plain-name fallback.
 FFMPEG = shutil.which("ffmpeg") or "ffmpeg"
 FFPROBE = shutil.which("ffprobe") or "ffprobe"
+# Media demuxers only. Manifest demuxers such as concat can open other local files.
+INPUT_FORMATS = "aac,aiff,amr,asf,avi,caf,flac,flv,matroska,webm,mov,mp3,mpeg,mpegts,ogg,wav,wv"
 
 
 BOT_CHECK_MESSAGE = (
@@ -55,15 +58,25 @@ def validate_youtube_url(url: str) -> str:
     if (parts.scheme != "https" or parts.netloc not in
             {"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"}):
         raise ValueError("Only HTTPS YouTube URLs are supported.")
-    if parts.path == "/playlist" or "list" in parse_qs(parts.query, keep_blank_values=True):
+    query = parse_qs(parts.query, keep_blank_values=True, max_num_fields=64)
+    if parts.path == "/playlist" or "list" in query:
         raise ValueError("Playlists are not supported.")
+    if parts.netloc == "youtu.be":
+        video_ids = [parts.path.removeprefix("/")]
+    elif parts.path == "/watch":
+        video_ids = query.get("v", [])
+    else:
+        match = re.fullmatch(r"/(?:shorts|embed|live|v)/([A-Za-z0-9_-]{11})", parts.path)
+        video_ids = [match[1]] if match else []
+    if len(video_ids) != 1 or not re.fullmatch(r"[A-Za-z0-9_-]{11}", video_ids[0]):
+        raise ValueError("Provide a URL for a single YouTube video.")
     if os.getenv("ENABLE_YOUTUBE", "false").lower() != "true":
         raise ValueError("YouTube downloads are disabled.")
-    return url
+    return f"https://www.youtube.com/watch?v={video_ids[0]}"
 
 
 def download_youtube_audio(url: str) -> str:
-    validate_youtube_url(url)
+    url = validate_youtube_url(url)
     max_bytes = int(os.getenv("MAX_DOWNLOAD_MB", "").strip() or "25") * 1024 * 1024
     if max_bytes <= 0:
         raise ValueError("MAX_DOWNLOAD_MB must be positive.")
@@ -74,7 +87,9 @@ def download_youtube_audio(url: str) -> str:
             raise MediaValidationError("Download exceeds the size limit.")
 
     opts = {
-        "format": "bestaudio[protocol=https]/bestaudio[protocol=http]/best[protocol=https]/best[protocol=http]", "outtmpl": os.path.join(directory, "%(id)s.%(ext)s"),
+        "format": "bestaudio[protocol=https]/best[protocol=https]",
+        "outtmpl": os.path.join(directory, "%(id)s.%(ext)s"),
+        "allowed_extractors": ["youtube"],
         "quiet": True, "noplaylist": True, "max_filesize": max_bytes,
         "socket_timeout": 15, "retries": 0, "fragment_retries": 0,
         "progress_hooks": [limit_download],
@@ -113,11 +128,16 @@ def chunk_streaming(raw_path: str, chunk_minutes: int = CHUNK_MINUTES) -> tuple[
     Render's 512MB free tier on long recordings.
     """
     raw_path = os.path.abspath(raw_path)
-    probe = subprocess.run(
-        [FFPROBE, "-v", "error", "-protocol_whitelist", "file,pipe", "-show_entries",
-         "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", raw_path],
-        check=True, capture_output=True, timeout=30, stdin=subprocess.DEVNULL,
-    )
+    try:
+        probe = subprocess.run(
+            [FFPROBE, "-v", "error", "-protocol_whitelist", "file,pipe",
+             "-format_whitelist", INPUT_FORMATS, "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", raw_path],
+            check=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            timeout=30, stdin=subprocess.DEVNULL,
+        )
+    except subprocess.CalledProcessError:
+        raise MediaValidationError("The media is corrupt or uses an unsupported format.") from None
     _validate_duration(probe.stdout.decode("utf-8", "replace").strip())
     chunk_dir = tempfile.mkdtemp(prefix="avassist_chunks_")
     pattern = os.path.join(chunk_dir, "chunk_%03d.wav")
@@ -125,6 +145,7 @@ def chunk_streaming(raw_path: str, chunk_minutes: int = CHUNK_MINUTES) -> tuple[
     cmd = [
         FFMPEG, "-v", "error", "-nostats", "-y",
         "-protocol_whitelist", "file,pipe",
+        "-format_whitelist", INPUT_FORMATS,
         "-i", raw_path,
         "-t", str(_max_seconds()),
         "-vn",                       # drop any video stream — only the audio track matters
@@ -137,12 +158,11 @@ def chunk_streaming(raw_path: str, chunk_minutes: int = CHUNK_MINUTES) -> tuple[
     ]
 
     try:
-        subprocess.run(cmd, check=True, capture_output=True, timeout=max(60, _max_seconds() * 2), stdin=subprocess.DEVNULL)
-    except subprocess.CalledProcessError as err:
+        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                       timeout=max(60, _max_seconds() * 2), stdin=subprocess.DEVNULL)
+    except subprocess.CalledProcessError:
         cleanup([chunk_dir])
-        stderr = (err.stderr or b"").decode("utf-8", "replace").strip()
-        tail = stderr.splitlines()[-1] if stderr else "unknown ffmpeg error"
-        raise RuntimeError(f"Audio conversion failed: {tail}") from err
+        raise MediaValidationError("The media could not be decoded as audio.") from None
 
     except Exception:
         cleanup([chunk_dir])

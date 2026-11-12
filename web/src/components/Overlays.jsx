@@ -7,7 +7,7 @@ export default function Overlays() {
   const ringRef = useRef(null);
 
   useEffect(() => {
-    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) return undefined;
+    if (!window.matchMedia('(hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)').matches) return undefined;
     document.body.classList.add('custom-cursor');
 
     const dot = dotRef.current;

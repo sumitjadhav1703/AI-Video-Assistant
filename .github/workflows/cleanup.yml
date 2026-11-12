@@ -8,6 +8,8 @@ on:
     - cron: '0 3 * * *' # daily at 03:00 UTC
   workflow_dispatch: {} # manual "Run workflow" button
 
+permissions: {}
+
 jobs:
   cleanup:
     runs-on: ubuntu-latest
@@ -23,7 +25,7 @@ jobs:
             exit 1
           fi
           # --retry handles Render free-tier cold starts (the service may be asleep).
-          curl -fsS -X POST \
+          curl --proto '=https' -fsS -X POST \
             --retry 5 --retry-all-errors --retry-delay 30 --max-time 180 \
             "$BACKEND_URL/admin/cleanup?older_than_days=1" \
             -H "X-Admin-Token: $ADMIN_TOKEN"

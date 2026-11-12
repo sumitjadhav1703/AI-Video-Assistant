@@ -70,7 +70,8 @@ function registerReadTool<Schema extends z.ZodType>(
   });
 }
 
-const jobIdSchema = z.uuid();
+// PostgreSQL accepts canonical UUIDs without restricting their variant or version bits.
+const jobIdSchema = z.guid();
 const cursorSchema = z.string().min(1).max(96);
 const listKeySchema = z.tuple([
   z.literal("1"),

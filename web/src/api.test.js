@@ -61,8 +61,12 @@ test('availability is unauthenticated and invite is sent only on an invited uplo
 
 test('every job operation uses bearer auth and chat sends economy', async () => {
   const requests = [];
+  const result = { title: 'Title', summary: 'Summary', transcript: 'Transcript',
+    action_items: '', key_decisions: '', open_questions: '' };
   globalThis.fetch = async (url, options) => {
     requests.push({ url, ...options });
+    if (url.endsWith('/result')) return Response.json(result);
+    if (url.endsWith('/chat')) return Response.json({ answer: 'Answer', citations: [] });
     return new Response('{}');
   };
   await getStatus(job);
@@ -78,4 +82,27 @@ test('every job operation uses bearer auth and chat sends economy', async () => 
     assert.equal(headers['X-Demo-Invite'], undefined);
   }
   assert.equal(JSON.parse(requests[2].body).tier, 'economy');
+});
+
+test('malformed successful results and chat responses are rejected before rendering', async () => {
+  for (const [call, body] of [
+    [() => getResult(job), { title: 'Title', summary: { body: 'Wrong shape' } }],
+    [() => askChat(job, 'question'), { answer: 'Answer', citations: 'Wrong shape' }],
+    [() => askChat(job, 'question'), { answer: 'Answer', citations: [null] }],
+  ]) {
+    globalThis.fetch = async () => Response.json(body);
+    await assert.rejects(call(), (error) =>
+      error.status === 502 && /invalid response/i.test(error.message));
+  }
+});
+
+test('credentialed API requests reject redirects instead of forwarding headers', async () => {
+  const requests = [];
+  globalThis.fetch = async (url, options) => {
+    requests.push(options);
+    return Response.json({});
+  };
+  const file = Object.assign(new Blob(['clip']), { name: 'clip.wav' });
+  await startJob({ file, inviteCode: 'invitation' });
+  assert.equal(requests[0].redirect, 'error');
 });

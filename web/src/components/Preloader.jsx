@@ -8,21 +8,26 @@ export default function Preloader({ onDone }) {
   const [pct, setPct] = useState(0);
 
   useEffect(() => {
+    let progress = 0;
+    let complete;
     const id = setInterval(() => {
-      setPct((p) => {
-        const next = Math.min(100, p + 2);
-        if (next >= 100) {
-          clearInterval(id);
-          setTimeout(onDone, 450);
-        }
-        return next;
-      });
+      progress += 2;
+      setPct(progress);
+      if (progress === 100) {
+        clearInterval(id);
+        complete = setTimeout(onDone, 450);
+      }
     }, 20);
-    return () => clearInterval(id);
+    return () => {
+      clearInterval(id);
+      clearTimeout(complete);
+    };
   }, [onDone]);
 
   return (
     <div
+      className="minutes-preloader"
+      aria-hidden="true"
       style={{
         position: 'fixed',
         inset: 0,

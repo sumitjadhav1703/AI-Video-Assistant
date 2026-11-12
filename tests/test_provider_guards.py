@@ -6,7 +6,7 @@ import wave
 from pathlib import Path
 from unittest.mock import patch
 
-from backend.core import extractor, rag_engine, summarizer, transcriber, vector_store
+from backend.core import embedding_routes, extractor, rag_engine, summarizer, transcriber, vector_store
 from backend.core.llm_gateway import operation_scope
 
 
@@ -33,8 +33,8 @@ class ProviderGuardsTests(unittest.TestCase):
                'ENABLE_GEMINI_EMBEDDINGS': 'true', 'GEMINI_EMBEDDINGS_VERIFIED_FREE': 'true',
                'GEMINI_API_KEY': 'offline-placeholder', 'GEMINI_EMBEDDINGS_RPM': '10',
                'GEMINI_EMBEDDINGS_TPM': '50000', 'GEMINI_EMBEDDINGS_RPD': '100'}
-        with patch.dict(os.environ, env, clear=True), patch.object(vector_store.httpx, 'Client') as client, \
-                patch.object(vector_store.httpx, 'HTTPTransport') as transport, \
+        with patch.dict(os.environ, env, clear=True), patch.object(embedding_routes.httpx, 'Client') as client, \
+                patch.object(embedding_routes.httpx, 'HTTPTransport') as transport, \
                 patch('backend.core.provider_budget.reserve_attempt'), \
                 patch('backend.core.provider_budget.record_attempt_result'), operation_scope('test-job'):
             client.return_value.__enter__.return_value.post.return_value.json.return_value = {
@@ -51,17 +51,17 @@ class ProviderGuardsTests(unittest.TestCase):
                 patch.object(vector_store, 'get_embeddings') as embeddings:
             cursor = connect.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value
             cursor.fetchone.return_value = {'table_name': 'langchain_pg_collection'}
-            vector_store.delete_vector_store('abc')
+            vector_store.db.delete_vector_store('abc')
             embeddings.assert_not_called()
             deletes = [call.args for call in cursor.execute.call_args_list if call.args[0].startswith('DELETE')]
-            self.assertEqual(deletes, [('DELETE FROM langchain_pg_collection WHERE name = %s', ('job_abc',)),
+            self.assertEqual(deletes, [('DELETE FROM langchain_pg_collection WHERE name=%s', ('job_abc',)),
                                        ('DELETE FROM transcript_chunks WHERE job_id=%s', ('abc',))])
 
     def test_delete_collection_is_noop_when_table_absent(self):
         with patch('backend.db.connect') as connect:
             cursor = connect.return_value.__enter__.return_value.cursor.return_value.__enter__.return_value
             cursor.fetchone.return_value = {'table_name': None}
-            vector_store.delete_vector_store('abc')
+            vector_store.db.delete_vector_store('abc')
             self.assertEqual(cursor.execute.call_count, 2)
             self.assertFalse(any(call.args[0].startswith('DELETE') for call in cursor.execute.call_args_list))
 
