@@ -49,6 +49,8 @@ class RequestContextExceeded(ValueError):
 
 def provider_limits(route) -> tuple[int, int, int]:
     """Use the strictest configured account ceiling across all operations."""
+    from .embedding_routes import configured_embedding_routes
+
     limits = [(route.rpm, route.tpm, route.rpd)]
     try:
         routes = json.loads(os.getenv('LLM_ROUTES_JSON', '[]'))
@@ -59,7 +61,10 @@ def provider_limits(route) -> tuple[int, int, int]:
                 raise ValueError()
             if item.get('provider') == route.provider:
                 limits.append(tuple(item[name] for name in ('rpm', 'tpm', 'rpd')))
-        if route.provider == 'gemini' and os.getenv('ENABLE_GEMINI_EMBEDDINGS', '').strip().lower() == 'true':
+        if 'EMBEDDING_ROUTES_JSON' in os.environ:
+            limits.extend((embedding.rpm, embedding.tpm, embedding.rpd)
+                          for embedding in configured_embedding_routes() if embedding.provider == route.provider)
+        elif route.provider == 'gemini' and os.getenv('ENABLE_GEMINI_EMBEDDINGS', '').strip().lower() == 'true':
             limits.append(tuple(int(os.environ['GEMINI_EMBEDDINGS_' + name]) for name in ('RPM', 'TPM', 'RPD')))
         if any(type(value) is not int or value <= 0 for ceiling in limits for value in ceiling):
             raise ValueError()

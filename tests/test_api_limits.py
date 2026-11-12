@@ -186,6 +186,18 @@ class APILimitTests(unittest.TestCase):
         self.assertEqual(response.status_code, 429)
         self.assertEqual(response.headers['Retry-After'], '45')
 
+    def test_pinned_embedding_unavailability_returns_retryable_503(self):
+        from backend.core.embedding_routes import EmbeddingRetryable
+
+        with patch.object(api.db, 'reserve_chat', return_value='owner'), \
+                patch.object(api.db, 'release_slot') as release, patch.object(api, 'load_rag_chain'), \
+                patch.object(api, 'ask_question', side_effect=EmbeddingRetryable('provider internals')):
+            response = self.client.post('/jobs/' + 'a' * 32 + '/chat', json={'question': 'hello'})
+        self.assertEqual(response.status_code, 503)
+        self.assertTrue(response.headers['Retry-After'].isdigit())
+        self.assertNotIn('provider internals', response.text)
+        release.assert_called_once_with('chat', 'owner')
+
     def test_job_budget_exhaustion_has_no_retry_after(self):
         from backend.core.provider_budget import JobBudgetExceeded
         with patch.object(api.db, 'reserve_chat', return_value='owner'), patch.object(api.db, 'release_slot'), patch.object(api, 'load_rag_chain', side_effect=JobBudgetExceeded('budget')):
@@ -379,7 +391,7 @@ class JobSafetyTests(unittest.TestCase):
             media.assert_not_called()
             stt.assert_not_called()
             fail.assert_not_called()
-            scope.assert_called_once_with('owner-job', owner=True, allow_paid=True)
+            scope.assert_called_once_with('owner-job', owner=True, allow_paid=True, local_owner=False)
             transcript, documents = preflight.call_args.args
             self.assertIn('twelve seats', transcript)
             self.assertTrue(all(document.metadata['timing_precision'] == 'unknown' for document in documents))
@@ -451,10 +463,11 @@ class CLIOwnerTests(unittest.TestCase):
                 patch.object(cli, 'ask_question', return_value={'answer': 'twelve'}) as ask:
             cli.main()
         job_id = run.call_args.args[0]
-        run.assert_called_once_with(job_id, None, 'english', reservation_token='processing-slot', owner=True, allow_paid=True)
+        run.assert_called_once_with(job_id, None, 'english', reservation_token='processing-slot',
+                                    owner=True, allow_paid=True, local_owner=True)
         stt.assert_not_called()
         self.assertEqual(chat.call_args.args[0], job_id)
         load.assert_called_once_with(job_id, 'strong')
         ask.assert_called_once_with('chain', cli.OWNER_EVALUATION_QUESTIONS[0])
         self.assertEqual(scope.call_count, 2)
-        scope.assert_called_with(job_id, owner=True, allow_paid=True)
+        scope.assert_called_with(job_id, owner=True, allow_paid=True, local_owner=True)

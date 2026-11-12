@@ -52,11 +52,11 @@ class HybridTests(unittest.TestCase):
                 hybrid_retrieve('real','a',[doc(0,'real text')],store)
 
     def test_embedding_vector_is_finite_normalized_and_dimension_checked(self):
-        self.assertTrue(hasattr(vector_store,'normalize_embedding'),'embedding validation missing')
-        vector=vector_store.normalize_embedding([3.0,4.0]+[0.0]*766)
+        from backend.core.embedding_routes import normalize_embedding
+        vector=normalize_embedding([3.0,4.0]+[0.0]*766, 768)
         self.assertEqual(vector[:2],[0.6,0.8])
         for invalid in ([0.0]*768,[float('nan')]*768,[1.0]*767):
-            with self.assertRaises(ValueError): vector_store.normalize_embedding(invalid)
+            with self.assertRaises(ValueError): normalize_embedding(invalid, 768)
 
     def test_corrupt_raw_corpus_is_sanitized_and_empty_reranker_is_unavailable(self):
         from backend.core.retrieval import hybrid_retrieve, RetrievalUnavailable
@@ -87,7 +87,7 @@ class HybridTests(unittest.TestCase):
         env={'ENABLE_PROVIDER_CALLS':'true','RATE_LIMIT_SECRET':'x'*32,'ENABLE_GEMINI_EMBEDDINGS':'true',
              'GEMINI_EMBEDDINGS_VERIFIED_FREE':'true','GEMINI_API_KEY':'offline','GEMINI_EMBEDDINGS_RPM':'10',
              'GEMINI_EMBEDDINGS_TPM':'50000','GEMINI_EMBEDDINGS_RPD':'100'}
-        with patch.dict(os.environ,env,clear=True),patch.object(vector_store.httpx,'Client') as client, \
+        with patch.dict(os.environ,env,clear=True),patch('backend.core.embedding_routes.httpx.Client') as client, \
                 patch.object(vector_store.provider_budget,'reserve_attempt',return_value=7), \
                 patch.object(vector_store.provider_budget,'record_attempt_result') as record,operation_scope('a'):
             client.return_value.__enter__.return_value.post.return_value.json.return_value={'embeddings':[{'values':[1.0]*767}]}

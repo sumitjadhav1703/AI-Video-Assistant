@@ -25,6 +25,7 @@ from .core.audio_budget import profile_for_language
 from .core.provider_budget import JobBudgetExceeded
 from .core.reranker import load_ranker
 from .core.retrieval import RetrievalUnavailable
+from .core.embedding_routes import EmbeddingRouteUnavailable
 from .core.guardrails import sanitize_text, GuardrailError
 from .core.llm_gateway import operation_scope, get_llm
 from .core.telemetry import metric
@@ -446,6 +447,9 @@ def job_chat(job_id: str, body: ChatRequest, request: Request):
         raise HTTPException(429, str(error), headers={'Retry-After': str(error.retry_after)}) from None
     except JobBudgetExceeded:
         raise HTTPException(409, 'This job has reached its processing budget. Start a new job with a shorter recording.') from None
+    except EmbeddingRouteUnavailable:
+        raise HTTPException(503, 'This session’s embedding service is unavailable. Please try again later.',
+                            headers={'Retry-After': '60'}) from None
     except RetrievalUnavailable:
         raise HTTPException(503, 'This session cannot be searched. Please create a new session.') from None
     except Exception as error:

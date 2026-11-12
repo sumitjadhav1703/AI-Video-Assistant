@@ -95,6 +95,7 @@ SCHEMA += """
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS retrieval_version TEXT NOT NULL DEFAULT 'legacy';
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS embedding_model TEXT;
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS embedding_dimension INTEGER;
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS embedding_route TEXT;
 CREATE TABLE IF NOT EXISTS transcript_chunks (
     chunk_id TEXT PRIMARY KEY,
     job_id TEXT NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
@@ -120,26 +121,35 @@ def init_db() -> None:
         conn.commit()
 
 
-def _set_retrieval_config(cur, job_id, retrieval_version, embedding_model, embedding_dimension):
-    cur.execute('SELECT status, retrieval_version, embedding_model, embedding_dimension FROM jobs WHERE id=%s FOR UPDATE', (job_id,))
+def _set_retrieval_config(cur, job_id, retrieval_version, embedding_model, embedding_dimension, embedding_route):
+    from .core.embedding_routes import EMBEDDING_SPACES
+    if retrieval_version != 'hybrid-v1' or EMBEDDING_SPACES.get(embedding_route) != (embedding_model, embedding_dimension):
+        raise ValueError('Unsupported retrieval configuration')
+    cur.execute('''SELECT status, retrieval_version, embedding_model, embedding_dimension, embedding_route
+                   FROM jobs WHERE id=%s FOR UPDATE''', (job_id,))
     row = cur.fetchone()
     if not row:
         raise JobUnavailable('Job not found')
-    requested = (retrieval_version, embedding_model, embedding_dimension)
-    current = (row['retrieval_version'], row['embedding_model'], row['embedding_dimension'])
+    requested = (retrieval_version, embedding_model, embedding_dimension, embedding_route)
+    current_space = (row['embedding_model'], row['embedding_dimension'])
+    current_route = row['embedding_route']
+    if current_route is None and current_space == EMBEDDING_SPACES['gemini-embeddings']:
+        current_route = 'gemini-embeddings'
+    current = (row['retrieval_version'], *current_space, current_route)
     if current != requested and (row['embedding_model'] is not None or row['status'] not in ('queued', 'running')):
         raise ValueError('Embedding configuration is immutable; legacy jobs require reprocessing.')
-    if requested != ('hybrid-v1', 'gemini-embedding-001', 768):
-        raise ValueError('Unsupported retrieval configuration')
-    cur.execute('UPDATE jobs SET retrieval_version=%s, embedding_model=%s, embedding_dimension=%s WHERE id=%s', (*requested, job_id))
+    cur.execute('''UPDATE jobs SET retrieval_version=%s, embedding_model=%s, embedding_dimension=%s,
+                   embedding_route=%s WHERE id=%s''', (*requested, job_id))
 
 
-def set_retrieval_config(job_id, retrieval_version, embedding_model, embedding_dimension):
+def set_retrieval_config(job_id, retrieval_version, embedding_model, embedding_dimension,
+                         embedding_route='gemini-embeddings'):
     with connect() as conn, conn.cursor() as cur:
-        _set_retrieval_config(cur, job_id, retrieval_version, embedding_model, embedding_dimension)
+        _set_retrieval_config(cur, job_id, retrieval_version, embedding_model, embedding_dimension, embedding_route)
 
 
-def save_chunks(job_id, documents):
+def save_chunks(job_id, documents, *, embedding_route='gemini-embeddings'):
+    from .core.embedding_routes import EMBEDDING_SPACES
     from .core.guardrails import sanitize_text
     if not documents:
         raise ValueError('A chunk corpus cannot be empty')
@@ -154,7 +164,7 @@ def save_chunks(job_id, documents):
         rows.append((chunk_id, job_id, ordinal, doc.page_content,
                      metadata.get('start_ms'), metadata.get('end_ms'), metadata.get('timing_precision')))
     with connect() as conn, conn.cursor() as cur:
-        _set_retrieval_config(cur, job_id, 'hybrid-v1', 'gemini-embedding-001', 768)
+        _set_retrieval_config(cur, job_id, 'hybrid-v1', *EMBEDDING_SPACES[embedding_route], embedding_route)
         cur.executemany('''INSERT INTO transcript_chunks (chunk_id,job_id,ordinal,text,start_ms,end_ms,timing_precision)
                            VALUES (%s,%s,%s,%s,%s,%s,%s)''', rows)
 

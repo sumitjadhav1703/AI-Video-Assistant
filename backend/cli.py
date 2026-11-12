@@ -20,7 +20,7 @@ def run_pipeline(source: str | None, language: str = 'english', *, owner: bool =
         raise ValueError('Owner evaluation uses only the built-in synthetic transcript.')
     require_provider_calls(sarvam=language.lower() == 'hinglish')
     job_id = uuid.uuid4().hex
-    with operation_scope(job_id, owner=owner, allow_paid=allow_paid):
+    with operation_scope(job_id, owner=owner, allow_paid=allow_paid, local_owner=owner):
         get_llm()
         get_embeddings()
         load_ranker()
@@ -29,7 +29,7 @@ def run_pipeline(source: str | None, language: str = 'english', *, owner: bool =
     settings = Settings.from_env()
     identity = client_key('127.0.0.1', settings.rate_limit_secret)
     token = db.admit_job(job_id, language, identity, settings)
-    run_job(job_id, source, language, reservation_token=token, owner=owner, allow_paid=allow_paid)
+    run_job(job_id, source, language, reservation_token=token, owner=owner, allow_paid=allow_paid, local_owner=owner)
     result = db.get_job(job_id)
     if not result or result['status'] != 'done':
         raise RuntimeError('Processing failed.')
@@ -69,7 +69,8 @@ def main():
             continue
         token = db.reserve_chat(result['job_id'], identity, settings)
         try:
-            with operation_scope(result['job_id'], owner=args.owner_evaluation, allow_paid=args.allow_paid):
+            with operation_scope(result['job_id'], owner=args.owner_evaluation, allow_paid=args.allow_paid,
+                                 local_owner=args.owner_evaluation):
                 answer = ask_question(load_rag_chain(result['job_id'], args.tier), question)
             print(f"\nAssistant: {answer['answer']}")
         finally:

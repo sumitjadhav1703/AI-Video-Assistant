@@ -32,7 +32,8 @@ _OWNER_EVALUATION_SCRIPT = (
 
 
 def run_job(job_id: str, source: str | None, language: str = "english", is_upload: bool = False,
-            reservation_token: str | None = None, *, owner: bool = False, allow_paid: bool = False) -> None:
+            reservation_token: str | None = None, *, owner: bool = False, allow_paid: bool = False,
+            local_owner: bool = False) -> None:
     """
     Run the full pipeline for one job, recording progress in Postgres as it goes.
     Invoked from a FastAPI BackgroundTask — never inside a request/response cycle,
@@ -45,15 +46,15 @@ def run_job(job_id: str, source: str | None, language: str = "english", is_uploa
     try:
         if owner and (source is not None or is_upload or language != 'english'):
             raise ValueError('Owner evaluation uses only the built-in synthetic transcript.')
-        if allow_paid and not owner:
-            raise ValueError('Paid access requires owner evaluation.')
+        if (allow_paid or local_owner) and not owner:
+            raise ValueError('This provider access requires owner evaluation.')
         require_provider_calls(sarvam=language == "hinglish")
         if not owner:
             db.set_step(job_id, "audio")
             with duration("media_processing"):
                 chunks, artifacts = process_input(source)
 
-        with operation_scope(job_id, owner=owner, allow_paid=allow_paid):
+        with operation_scope(job_id, owner=owner, allow_paid=allow_paid, local_owner=local_owner):
             db.set_step(job_id, "transcript")
             if owner:
                 segments = [{'text': text, 'start_ms': None, 'end_ms': None, 'timing_precision': 'unknown'}

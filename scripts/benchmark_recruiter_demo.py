@@ -21,6 +21,9 @@ CGROUP_ROOT = Path('/sys/fs/cgroup')
 QUESTION = 'When is the demo?'
 QUOTE = 'The demo is on Friday.'
 TRANSCRIPT = ' '.join([QUOTE + ' The team reviewed the plan and agreed to prepare slides.'] * 25)
+EMBEDDING_ROUTE = 'openrouter-nemotron'
+EMBEDDING_MODEL = 'nvidia/nemotron-3-embed-1b:free'
+EMBEDDING_DIMENSION = 2048
 
 
 def container_limits():
@@ -78,12 +81,12 @@ def run(dsn, clip, vector_sql, vector_library):
                  api_key_env='GEMINI_API_KEY', verified_free=True, input_limit_tokens=60000, rpm=100, tpm=1000000, rpd=100)
     stt = dict(provider='groq', model='whisper-large-v3-turbo', keyenv='GROQ_API_KEY', verified_free=True,
                rpm=10, rpd=10, audio_seconds_hour=600, audio_seconds_day=600)
+    embedding = dict(id=EMBEDDING_ROUTE, verified_free=True, rpm=100, tpm=1000000, rpd=100)
     env = dict(PATH=os.environ['PATH'], PYTHON_DOTENV_DISABLED='1', DATABASE_URL=dsn, DEMO_LIVE_MODE='public',
                ENABLE_PROVIDER_CALLS='true', RATE_LIMIT_SECRET='r' * 48, JOB_TOKEN_SECRET='j' * 48,
                MAX_UPLOAD_MB='10', MAX_MEDIA_SECONDS='120', LLM_ROUTES_JSON=json.dumps([route]),
                STT_PROFILES_JSON=json.dumps([stt]), GEMINI_API_KEY='offline', GROQ_API_KEY='offline',
-               ENABLE_GEMINI_EMBEDDINGS='true', GEMINI_EMBEDDINGS_VERIFIED_FREE='true',
-               GEMINI_EMBEDDINGS_RPM='100', GEMINI_EMBEDDINGS_TPM='1000000', GEMINI_EMBEDDINGS_RPD='100',
+               EMBEDDING_ROUTES_JSON=json.dumps([embedding]), OPENROUTER_API_KEY='offline',
                LITELLM_LOCAL_MODEL_COST_MAP='true', LITELLM_TELEMETRY='false', DO_NOT_TRACK='1')
     with psycopg.connect(dsn) as connection:
         if connection.execute("SELECT to_regclass('public.jobs')").fetchone()[0] is not None:
@@ -95,6 +98,7 @@ def run(dsn, clip, vector_sql, vector_library):
     overlap = threading.Event()
     rendezvous = threading.Barrier(2, timeout=90)
     counts = {'stt': 0, 'embedding': 0, 'generation': 0}
+    embedding_requests = {'passage': 0, 'query': 0}
     count_lock = threading.Lock()
     original_connect = socket.socket.connect
     original_connect_ex = socket.socket.connect_ex
@@ -113,18 +117,25 @@ def run(dsn, clip, vector_sql, vector_library):
                 counts['stt'] += 1
             return httpx.Response(200, json={'task': 'transcribe', 'language': 'english', 'duration': 120,
                                              'text': TRANSCRIPT, 'segments': [{'text': TRANSCRIPT, 'start': 0, 'end': 1}]})
-        if host != 'generativelanguage.googleapis.com':
-            raise AssertionError('Benchmark blocked an unexpected HTTP destination')
-        payload = json.loads(request.content)
-        if path.endswith(':batchEmbedContents'):
+        if host == 'openrouter.ai' and path == '/api/v1/embeddings':
+            payload = json.loads(request.content)
+            assert request.method == 'POST' and payload['model'] == EMBEDDING_MODEL
+            assert payload['encoding_format'] == 'float' and payload['provider']['allow_fallbacks'] is False
+            inputs = payload['input']
+            assert isinstance(inputs, list) and inputs
+            kind = 'query' if inputs == [f'query: {QUESTION}'] else 'passage'
+            assert all(value.startswith(f'{kind}: ') for value in inputs)
             with count_lock:
                 counts['embedding'] += 1
+                embedding_requests[kind] += 1
             if overlap.is_set():
                 rendezvous.wait()
-            return httpx.Response(200, json={'embeddings': [
-                {'values': [1.0] + [0.0] * 767} for _ in payload['requests']]})
-        if not path.endswith(':generateContent'):
-            raise AssertionError('Benchmark blocked an unexpected HTTP operation')
+            return httpx.Response(200, json={'object': 'list', 'model': EMBEDDING_MODEL, 'data': [
+                {'object': 'embedding', 'index': index, 'embedding': [1.0] + [0.0] * (EMBEDDING_DIMENSION - 1)}
+                for index, _ in enumerate(inputs)]})
+        if host != 'generativelanguage.googleapis.com' or not path.endswith(':generateContent'):
+            raise AssertionError('Benchmark blocked an unexpected HTTP destination or operation')
+        payload = json.loads(request.content)
         with count_lock:
             counts['generation'] += 1
         request_json = request.content.decode()
@@ -218,6 +229,7 @@ def run(dsn, clip, vector_sql, vector_library):
             overlap.clear()
             third_job, third_headers, warm = submit(third_client)
             warm_chat = ask(third_client, third_job, third_headers)
+            assert embedding_requests == {'passage': 3, 'query': 3}, 'Expected one OpenRouter request for each job and chat'
             for client, identifier, capability in ((primary, job_id, headers),
                                                     (second_client, second_job, second_headers),
                                                     (third_client, third_job, third_headers)):
@@ -229,6 +241,11 @@ def run(dsn, clip, vector_sql, vector_library):
                 usage = connection.execute('SELECT COUNT(*) AS attempts, SUM(input_tokens) AS reserved_input, '
                                            'SUM(output_tokens) AS reserved_output FROM provider_attempts').fetchone()
                 usage = {key: int(value) for key, value in usage.items()}
+                embedding_attempts = connection.execute(
+                    "SELECT COUNT(*) AS total FROM provider_attempts WHERE route_alias = %s AND status = 'success'",
+                    (EMBEDDING_ROUTE,),
+                ).fetchone()['total']
+                assert embedding_attempts == counts['embedding'], 'Expected a successful reservation per embedding request'
     finally:
         metric_logger.removeHandler(handler)
         metric_logger.setLevel(previous_level)
@@ -243,6 +260,8 @@ def run(dsn, clip, vector_sql, vector_library):
         'overlapping_job_seconds': concurrent, 'overlapping_chat_seconds': chat,
         'warm_job_seconds': warm, 'warm_chat_seconds': warm_chat,
         'stage_metrics': stage_metrics, 'mocked_requests': counts, 'reserved_audio_ms': int(audio_ms),
+        'embedding_route': EMBEDDING_ROUTE, 'embedding_model': EMBEDDING_MODEL,
+        'embedding_dimension': EMBEDDING_DIMENSION,
         'text_ledger': usage,
         'python_peak_rss_bytes': resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * (1 if sys.platform == 'darwin' else 1024),
         'python_cpu_seconds': time.process_time() - cpu_start,

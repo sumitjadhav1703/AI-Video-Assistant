@@ -57,7 +57,7 @@ def assert_private_runtime() -> None:
 
 
 @contextmanager
-def operation_scope(job_id: str, *, owner: bool = False, allow_paid: bool = False):
+def operation_scope(job_id: str, *, owner: bool = False, allow_paid: bool = False, local_owner: bool = False):
     if not isinstance(job_id, str) or not job_id.strip() or len(job_id) > 200:
         raise ValueError('A bounded operation identity is required')
     assert_private_runtime()
@@ -65,11 +65,13 @@ def operation_scope(job_id: str, *, owner: bool = False, allow_paid: bool = Fals
     if current is not None and current['job_id'] != job_id:
         raise RuntimeError('Cannot replace an active operation identity')
     from langsmith import tracing_context
-    if type(owner) is not bool or type(allow_paid) is not bool or (allow_paid and not owner):
-        raise ValueError('Paid generation requires an owner grant')
-    if current is not None and ((owner and not current['owner']) or (allow_paid and not current['allow_paid'])):
+    if any(type(flag) is not bool for flag in (owner, allow_paid, local_owner)) or ((allow_paid or local_owner) and not owner):
+        raise ValueError('Owner-only provider access requires an owner grant')
+    if current is not None and any(flag and not current[name] for name, flag in
+                                   (('owner', owner), ('allow_paid', allow_paid), ('local_owner', local_owner))):
         raise RuntimeError('Cannot elevate an active operation grant')
-    token = _OPERATION.set(current or {'job_id': job_id, 'owner': owner, 'allow_paid': allow_paid, 'failed': {}})
+    token = _OPERATION.set(current or {'job_id': job_id, 'owner': owner, 'allow_paid': allow_paid,
+                                       'local_owner': local_owner, 'failed': {}})
     try:
         with tracing_context(enabled=False):
             yield
@@ -82,6 +84,10 @@ def current_operation() -> str:
     if job_id is None:
         raise RuntimeError('Provider calls require a durable operation scope')
     return job_id['job_id']
+
+
+def local_owner_operation() -> bool:
+    return (_OPERATION.get() or {}).get('local_owner', False)
 
 
 def _routes() -> list[Route]:
@@ -165,8 +171,7 @@ def _transient(error: Exception) -> bool:
     return isinstance(error, (ConnectionError, TimeoutError)) or name in ('apiconnectionerror', 'apitimeouterror', 'timeoutexception', 'connecttimeout', 'readtimeout')
 
 
-def _invoke_route(route: Route, messages, temperature: float, timeout: float, max_output_tokens: int = 1024):
-    ensure_route_compatible(route)
+def private_litellm():
     os.environ['LITELLM_LOCAL_MODEL_COST_MAP'] = 'True'
     os.environ['LITELLM_TELEMETRY'] = 'False'
     os.environ['LITELLM_LOG'] = 'CRITICAL'
@@ -187,6 +192,12 @@ def _invoke_route(route: Route, messages, temperature: float, timeout: float, ma
     litellm.callbacks = []
     litellm.success_callback = []
     litellm.failure_callback = []
+    return litellm
+
+
+def _invoke_route(route: Route, messages, temperature: float, timeout: float, max_output_tokens: int = 1024):
+    ensure_route_compatible(route)
+    litellm = private_litellm()
     api_key = os.getenv(route.api_key_env, '').strip()
     if not api_key:
         raise ValueError('Configured model route credentials are missing')
