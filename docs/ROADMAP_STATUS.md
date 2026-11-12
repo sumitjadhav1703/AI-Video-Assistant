@@ -1,18 +1,24 @@
 # Upgrade roadmap status
 
-Reviewed 2026-11-11 on `work/project-updates`. The approved revision specifies LangChain PGVector and BM25, RRF, then mandatory FlashRank reranking. It supersedes the earlier FTS and optional-reranking proposals in the [implementation plan](../UPGRADE_IMPLEMENTATION_PLAN.md) and [planning brief](../AI_VIDEO_ASSISTANT_CODEX_PLANNING_BRIEF.md).
+Handoff reviewed November 12, 2026 for `ci/sample-stack` and [PR #4](https://github.com/sumitjadhav1703/AI-Video-Assistant/pull/4). Start with [AGENTS.md](../AGENTS.md) in `~/Projects/AI-Video-Assistant`. The current retrieval implementation uses pgvector and BM25, RRF, and mandatory FlashRank reranking. The [implementation plan](../UPGRADE_IMPLEMENTATION_PLAN.md) and [planning brief](../AI_VIDEO_ASSISTANT_CODEX_PLANNING_BRIEF.md) document the earlier design.
 
 | Workstream | Status |
 | --- | --- |
 | Safety and rate limiting | Implemented. PostgreSQL enforces shared, per-client and per-job limits, token-owned processing/chat slots, and provider attempt, text and audio budgets. Media and prompts are bounded. Inference defaults to disabled. |
 | LangChain and LiteLLM | Implemented the in-process Router, economy/strong tiers, and application-owned fallback accounting. Gemini and Groq passed intercepted-HTTP SDK tests. Live generation remains disabled pending account verification. |
+| Embedding routes | New indexes use the configured free route order. If a route temporarily fails during indexing, the fallback embeds the full job before publishing its index. Chat pins the persisted embedding route and dimension. The two Nemotron trial routes are disabled on Render. |
+| Minutes UI | The original upload workspace opens at `/` with two bundled spoken demo clips. Desktop results place chat alongside the summary and findings. Mobile shows chat first. The collapsed transcript follows both. The prepared `/sample` is independent of the backend. |
 | Privacy and provenance | Implemented text identifier redaction, sanitized chunks, stable job-scoped IDs, timestamp precision labels, structured findings, and validation of chat citations against retrieved passages. Existing embedding spaces remain separate. |
 | Hybrid retrieval | Implemented ten dense and ten BM25 candidates, deterministic RRF, up to twelve unique reranker candidates, and up to four final passages. Reranker failure stops generation. |
 | Restart recovery | Added explicit, fenced operator recovery for stale processing/chat reservations, and actionable interrupted status in the web app. Users retry by starting a new analysis. |
 | Performance measurement | Added content-free stage timings and counts. Compared retrieval stages with actual local embeddings and ran an isolated browser audio experiment. Neither experiment adds a production dependency. |
 | Evaluation and release | Pending the gates below. |
 
-All 162 backend tests passed, including PostgreSQL 16, pgvector 0.8.1, real FlashRank inference and intercepted Gemini-to-Groq failover. Four frontend tests and the production frontend build passed. A Playwright test exercised interrupted-job messaging and the Start over action using intercepted requests. A separate loopback Uvicorn check verified that the request path was absent from the server log.
+## Verified locally
+
+- The multi-provider update passed 213 backend tests with PostgreSQL 16 and pgvector 0.8.1. The Linux ARM64 workload peaked at 365.96 MiB under the 512 MiB, zero-swap, 0.1-CPU cap. Three 120-second clips completed upload, grounded chat, and cleanup with intercepted provider HTTP. [Benchmark record](RECRUITER_DEMO.md#local-verification)
+- Seven frontend tests and the Vite production build passed after the UI update. Chrome with intercepted requests verified demo selection, explicit upload, progress, results, chat citations, refresh, deletion, and chat above the fold at 320 px and 1082 px. The offline sample loaded and sought to citations with backend access blocked.
+- Check the Actions run linked to the current PR head for native AMD64 results. Prior ARM64 results measure a separate architecture.
 
 ## Recovery after an interrupted process
 
@@ -34,9 +40,7 @@ The CLI prompts for the exact token without echo. It requires 30 minutes since r
 
 ## Remaining release gates
 
-1. Verify model allowances, usage limits, data terms, and overage controls for the [configured routes](HYBRID_IMPLEMENTATION.md#provider-and-release-gates) and new Singapore accounts. Verify `gemini-embedding-001` at 768 dimensions and Groq Whisper Large V3 Turbo for English transcription. Sarvam and YouTube remain off by default. [Gemini pricing](https://ai.google.dev/gemini-api/docs/pricing) · [Groq limits](https://console.groq.com/docs/rate-limits) · [Render Free](https://render.com/docs/free) · [Neon plans](https://neon.com/docs/introduction/plans)
-2. Verify NVIDIA trial access with an approved private synthetic test. Verify Meta pricing and the shared ledger before enabling its owner-only switch. See the [Singapore cutover and release gates](RECRUITER_DEMO.md#release-order).
-3. Build and exercise the backend in a Linux container capped at 512 MiB, including bounded upload/FFmpeg, indexing and chat with mocked providers. The existing import and reranker stress script is a preliminary check. The macOS full-import result of 444.6 MiB cannot establish Linux or full-workload fit. Verify proxy attribution, edge protection, and migration/rollback before public rollout. [Benchmark commands](BENCHMARK_NOTES.md)
-4. Run representative relevance and answer evaluation when `rag-eval-deepeval-main`, labelled permissible material, and a free/local judge strategy are available. Browser Whisper, parallel STT and prompt consolidation remain optional until measured against a representative baseline.
-
-See the [hybrid implementation guide](HYBRID_IMPLEMENTATION.md) for provider configuration and the [local backend suite](../output/validation/roadmap-tests.log) for current test evidence.
+1. Verify the current PR head passes native AMD64 validation, including the 512 MiB workload and exact-image OS package scan. Review the PR and keep hosted sample release gated until the configured targets and rollback checks pass. [Sample deployment runbook](SAMPLE_DEPLOYMENT.md)
+2. Verify account-specific model access, free limits, data terms, and overage controls for every selected STT, generation, and embedding route. Once authorized, run one English synthetic upload through the real providers, inspect the cited chat answer, and delete the job. Keep optional NVIDIA trial testing private and paid Meta disabled by default. [Provider configuration](HYBRID_IMPLEMENTATION.md#provider-and-release-gates)
+3. Run representative relevance and answer evaluation with `rag-eval-deepeval-main`, labelled permissible material, and a free or local judge. Use the resulting baseline before tuning retrieval or extending the provider set. [Benchmark notes](BENCHMARK_NOTES.md)
+4. Complete the separate hosted sample and live release checks for Render, Vercel, Cloudflare, and Neon. Verify proxy attribution, CORS, database readiness, and recovery before a hosted invited smoke test. Public inference needs its own approval. [Release order](RECRUITER_DEMO.md#release-order)

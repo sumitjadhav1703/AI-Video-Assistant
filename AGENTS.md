@@ -1,10 +1,19 @@
 # Repository Guidelines
 
+## Resume here
+
+- Open `~/Projects/AI-Video-Assistant`. Use `ci/sample-stack` for [PR #4](https://github.com/sumitjadhav1703/AI-Video-Assistant/pull/4) while it is open. Start with `git status --short --branch` and check the PR head and CI before making changes.
+- Read [roadmap status](docs/ROADMAP_STATUS.md) for measured results and pending gates. Use the [operator guide](docs/HYBRID_IMPLEMENTATION.md#local-setup) for disposable PostgreSQL with pgvector and verified provider configuration. The [sample deployment runbook](docs/SAMPLE_DEPLOYMENT.md) covers the separate hosted release.
+- Preview Minutes at `http://127.0.0.1:5173/`. The standalone `/sample` uses prepared results and citations. The [browser test commands](docs/RECRUITER_DEMO.md#local-browser-checks) exercise the live-flow UI with intercepted requests. The API and CLI require verified provider accounts before live calls.
+- Next, verify native AMD64 validation and the exact-image OS scan for the PR head. Verify free access for each configured account before an authorized synthetic live smoke test. Representative evaluation and hosted release checks follow. Keep the hosted stack in sample mode until its separate gates are cleared.
+- Keep the existing `.env` private. Local evidence is in `output/handoff-verification/`. The retired checkouts are preserved locally in `output/local-checkout-archive/retired-checkouts.tar.gz`. Git ignores both.
+
 ## Project Structure & Module Organization
 
 - `backend/api.py` defines FastAPI routes; `jobs.py` orchestrates processing; `db.py` persists job state.
 - `backend/core/` contains transcription, summarization, extraction, RAG, and vector storage. `backend/utils/audio_processor.py` handles media acquisition, streaming chunks, and temporary-file cleanup.
 - `web/src/` contains the React app, reusable `components/`, shared `lib/` helpers, and `styles.css`. Keep backend requests in `web/src/api.js`.
+- `web/public/demo-clips/` holds the bundled recordings for the upload picker. `mcp-server/` contains the separate Cloudflare Worker.
 - `Dockerfile` and `render.yaml` configure backend hosting; `web/vercel.json` configures frontend hosting. `.github/workflows/cleanup.yml` schedules data cleanup.
 - `tests/` contains offline Python regression tests and opt-in local PostgreSQL tests. `web/src/api.test.js` tests frontend API error handling.
 
@@ -12,11 +21,11 @@
 
 Run backend commands from the repository root, preferably with Python 3.11 in a virtual environment:
 
-- `pip install -r backend/requirements.lock` installs the tested Python 3.11 dependencies; install system `ffmpeg` separately.
+- `python3.11 -m venv .venv` creates the local Python environment. Run `.venv/bin/python -m pip install -r backend/requirements.lock` and `.venv/bin/python scripts/prepare_reranker.py`. Install system `ffmpeg` separately.
 - `uvicorn backend.api:app --host 127.0.0.1 --port 8000 --reload --no-access-log` starts the API without logging bearer job IDs.
 - `python -m backend.cli` uses real providers and PostgreSQL. Reserve it for authorized smoke tests with verified free accounts.
 - `docker build -t ai-video-backend .` builds the backend image; `docker run -p 8000:8000 --env-file .env ai-video-backend` starts it.
-- In `web/`, run `npm install`, then `npm run dev` for development, `npm run build` for production output, or `npm run preview` to inspect that build.
+- In `web/`, run `npm ci`, then `npm run dev -- --host 127.0.0.1` for development, `npm run build` for production output, or `npm run preview` to inspect that build.
 
 The development proxy defaults to `http://localhost:8000`; keep `web/.env` pointed at a local backend for routine checks.
 
@@ -26,7 +35,7 @@ Use four-space indentation and `snake_case` for Python functions/modules. Use tw
 
 ## Testing Guidelines
 
-Run `python -m unittest discover -s tests -v` after installing the backend lockfile. Set `TEST_DATABASE_URL` only to disposable loopback PostgreSQL for transaction tests. In `web/`, run `npm test` and `npm run build`. No coverage threshold is configured. Add focused regression tests for behavior changes. Keep providers mocked and never use a production database for tests.
+Run `PYTHON_DOTENV_DISABLED=1 .venv/bin/python -m unittest discover -s tests -v` after installing the backend lockfile. Set `TEST_DATABASE_URL` to disposable loopback PostgreSQL with pgvector for integration tests. In `web/`, run `npm test` and `npm run build`. Add focused regression tests for behavior changes. Use mocked providers and disposable data for tests.
 
 ## Commit & Pull Request Guidelines
 
@@ -34,7 +43,7 @@ History uses prefixes such as `feat:`, `fix:`, `docs:`, and `ci:` with concise i
 
 ## Security & Agent Instructions
 
-Use `.env.example` templates; never commit credentials, cookies, or transcripts. Preserve job/vector isolation and temporary-file cleanup. Cleanup endpoints delete data: use a development database. Keep work on `work/project-updates`; do not push or publish PRs until explicitly authorized.
+Use `.env.example` templates. Keep credentials, cookies, transcripts, and private evidence out of Git. Preserve job/vector isolation and temporary-file cleanup. Use a development database for cleanup tests. Get explicit authorization for future pushes, merges, deployments, production migrations, and live provider calls.
 
 Remote provider calls default disabled. Do not enable them or add paid fallback without verifying free-only account access. Preserve durable usage counters and token-owned active slots; never reset them to bypass limits. Read `UPGRADE_IMPLEMENTATION_PLAN.md` before broader architecture changes.
 

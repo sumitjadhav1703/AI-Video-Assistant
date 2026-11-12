@@ -2,6 +2,8 @@
 
 GitHub runs validation on pull requests and pushes to `main`. A passing push to `main` can deploy Render, Vercel, then Cloudflare from the same SHA. Release jobs stop when a target fails or a newer commit supersedes the release. The Actions summary records the last confirmed platform deployment IDs.
 
+Use [PR #4](https://github.com/sumitjadhav1703/AI-Video-Assistant/pull/4) to review the current changes. The prepared frontend sample lives at `/sample` and remains available in sample mode with provider calls disabled.
+
 ## One-time setup
 
 Keep the activation variable unset or set to `false` until all targets are configured. Use the designated sample services. Keep inference and paid routes disabled throughout this stage.
