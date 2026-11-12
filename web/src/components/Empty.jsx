@@ -28,6 +28,11 @@ const readDuration = (file) => new Promise((resolve) => {
   media.onerror = () => done(null);
   media.src = url;
 });
+const youtubeHintStyle = {
+  position: 'absolute', top: 'calc(100% + 10px)', right: 0, zIndex: 5, width: 'min(320px, 80vw)',
+  padding: '12px 14px', borderRadius: 12, border: '1px solid rgba(232,229,222,0.25)', background: '#1c1b19',
+  color: CREAM, fontFamily: SANS, fontSize: 13, lineHeight: 1.55, textAlign: 'left', boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+};
 const noteStyle = { margin: '14px 2px 0', fontFamily: MONO, fontSize: 11, lineHeight: 1.7, color: MUTE };
 
 export default function Empty({ mode, submitting, onAnalyse, onRetryAvailability, uploadError, notice }) {
@@ -40,6 +45,7 @@ export default function Empty({ mode, submitting, onAnalyse, onRetryAvailability
   const [loadingDemo, setLoadingDemo] = useState(null);
   const [demoError, setDemoError] = useState('');
   const [durationSec, setDurationSec] = useState(null);
+  const [youtubeHint, setYoutubeHint] = useState(false);
   const inputRef = useRef(null);
   const demoRequest = useRef(null);
 
@@ -157,9 +163,30 @@ export default function Empty({ mode, submitting, onAnalyse, onRetryAvailability
             <button type="button" aria-pressed="true" data-hov="1" style={tabStyle(true)}>
               Upload file
             </button>
-            <button type="button" disabled aria-label="YouTube URL (unavailable)" style={tabStyle(false)}>
-              YouTube URL
-            </button>
+            <span
+              style={{ position: 'relative', display: 'inline-block' }}
+              onMouseEnter={() => setYoutubeHint(true)}
+              onMouseLeave={() => setYoutubeHint(false)}
+            >
+              {/* aria-disabled, not disabled: disabled buttons get no hover, focus or click to explain themselves. */}
+              <button
+                type="button"
+                aria-disabled="true"
+                aria-label="YouTube URL (unavailable)"
+                aria-describedby="youtube-unavailable"
+                onClick={() => setYoutubeHint((shown) => !shown)}
+                onFocus={() => setYoutubeHint(true)}
+                onBlur={() => setYoutubeHint(false)}
+                style={{ ...tabStyle(false), cursor: 'not-allowed' }}
+              >
+                YouTube URL
+              </button>
+              <span id="youtube-unavailable" role="tooltip" hidden={!youtubeHint} style={youtubeHintStyle}>
+                YouTube links aren&rsquo;t supported here: YouTube blocks downloads from hosted servers.
+                Download the video and upload the file instead. Running locally? The command-line tool
+                (<code>python -m backend.cli</code>) accepts YouTube links when <code>ENABLE_YOUTUBE=true</code>.
+              </span>
+            </span>
           </div>
         </div>
 
