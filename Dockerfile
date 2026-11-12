@@ -2,8 +2,9 @@
 # chunking) and yt-dlp (audio extraction) both shell out to it. Hence Docker.
 FROM python:3.11-slim
 
+# Request zlib1g explicitly so APT upgrades the copy inherited from the base image.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg \
+    && apt-get install -y --no-install-recommends ffmpeg zlib1g \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
