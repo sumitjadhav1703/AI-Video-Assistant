@@ -24,13 +24,30 @@ class AudioSafetyTests(unittest.TestCase):
             self.assertEqual({path.name for path in root.iterdir()}, {'sibling.wav', 'upload.media'})
 
     def test_invalid_media_has_safe_validation_error(self):
-        with patch.object(audio.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, stdout=b'601')):
+        with patch.object(audio.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, stdout=b'N/A')):
             with self.assertRaises(audio.MediaValidationError):
                 audio.chunk_streaming('/tmp/input.mp4')
 
+    def test_long_uploads_are_trimmed_to_the_cap_not_rejected(self):
+        calls = []
+        def run(cmd, **kwargs):
+            calls.append(cmd)
+            if len(calls) == 1:
+                return subprocess.CompletedProcess(cmd, 0, stdout=b'2240')
+            open(cmd[-1].replace('%03d', '000'), 'wb').close()
+            return subprocess.CompletedProcess(cmd, 0)
+        with patch.dict(os.environ, {'MAX_MEDIA_SECONDS': ''}), patch.object(audio.subprocess, 'run', side_effect=run):
+            chunks, directory = audio.chunk_streaming('/tmp/input.mp4')
+        audio.cleanup(chunks + [directory])
+        self.assertEqual(calls[1][calls[1].index('-t') + 1], '600.0')
+
+    def test_cap_cannot_exceed_ten_minutes(self):
+        with patch.dict(os.environ, {'MAX_MEDIA_SECONDS': '3600'}):
+            self.assertEqual(audio._max_seconds(), 600)
+
     def test_blank_duration_setting_uses_default(self):
         with patch.dict(os.environ, {'MAX_MEDIA_SECONDS': ''}):
-            self.assertEqual(audio._max_seconds(), 120)
+            self.assertEqual(audio._max_seconds(), 600)
 
     def test_blank_download_size_uses_default(self):
         with tempfile.TemporaryDirectory() as root, patch.object(audio.tempfile, 'tempdir', root), \
@@ -42,7 +59,7 @@ class AudioSafetyTests(unittest.TestCase):
             self.assertEqual(client.call_args.args[0]['max_filesize'], 25 * 1024 * 1024)
 
     def test_invalid_durations_are_rejected_before_conversion(self):
-        for duration in ('601', 'NaN', 'inf', 'N/A', '0'):
+        for duration in ('NaN', 'inf', 'N/A', '0', '-5'):
             with self.subTest(duration=duration), patch.dict(os.environ, {'MAX_MEDIA_SECONDS': '600'}), patch.object(audio.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, stdout=duration.encode())) as run:
                 with self.assertRaises((ValueError, RuntimeError)):
                     audio.chunk_streaming('/tmp/input.mp4')

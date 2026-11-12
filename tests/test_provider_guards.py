@@ -1,4 +1,5 @@
 import json
+import shutil
 import os
 import tempfile
 import unittest
@@ -8,6 +9,7 @@ from unittest.mock import patch
 
 from backend.core import embedding_routes, extractor, rag_engine, summarizer, transcriber, vector_store
 from backend.core.llm_gateway import operation_scope
+from stt_fixture import groq_chain
 
 
 class ProviderGuardsTests(unittest.TestCase):
@@ -22,6 +24,7 @@ class ProviderGuardsTests(unittest.TestCase):
                     operation()
 
     def test_transcript_length_is_rejected_without_truncation(self):
+        self.enterContext(groq_chain())
         with patch.object(transcriber, '_wav_duration_ms', return_value=1000), patch.object(transcriber, '_groq_segments', side_effect=[
                 [{'text': 'a' * 20000, 'start': 0, 'end': 1}],
                 [{'text': 'b' * 20001, 'start': 0, 'end': 1}]]):
@@ -75,6 +78,7 @@ class ProviderGuardsTests(unittest.TestCase):
                 operation('x' * 40001)
 
     def test_exact_transcript_boundary_is_accepted(self):
+        self.enterContext(groq_chain())
         with patch.object(transcriber, '_wav_duration_ms', return_value=1000), \
                 patch.object(transcriber, '_groq_segments', return_value=[{'text': 'a' * 40000, 'start': 0, 'end': 1}]):
             self.assertEqual(len(transcriber.transcribe_all(['one'])), 40000)
@@ -108,6 +112,17 @@ class ProviderGuardsTests(unittest.TestCase):
             self.assertEqual(create.call_args.kwargs['timestamp_granularities'], ['segment'])
             self.assertEqual(reserve.call_args.args[0], 'test-job')
             self.assertEqual(reserve.call_args.args[2], 1000)
+            name, body, mime = create.call_args.kwargs['file']
+            if shutil.which('ffmpeg'):
+                self.assertEqual((name, mime), ('audio.flac', 'audio/flac'))
+                self.assertTrue(body.startswith(b'fLaC'))
+
+    def test_groq_upload_falls_back_to_wav_when_flac_encoding_fails(self):
+        path = self._sample_wav()
+        with patch('subprocess.run', side_effect=OSError('no ffmpeg')):
+            name, body, mime = transcriber._upload_bytes(path)
+        self.assertEqual((name, mime), ('audio.wav', 'audio/wav'))
+        self.assertEqual(body, Path(path).read_bytes())
 
     def test_sarvam_key_and_model_resolved_at_call(self):
         model = 'saaras:v2.5'

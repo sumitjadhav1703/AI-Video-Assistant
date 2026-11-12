@@ -1,0 +1,111 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+AI Video Assistant ("Minutes"): upload a short English clip, get transcript, title, summary, findings, and hybrid-RAG chat with timestamped citations. FastAPI backend (Render, Docker), React/Vite SPA (Vercel), Neon Postgres + pgvector, and a separate read-only MCP Cloudflare Worker.
+
+Before starting, read [AGENTS.md](AGENTS.md) "Resume here" and [docs/ROADMAP_STATUS.md](docs/ROADMAP_STATUS.md) for current branch, open PR, and pending release gates. Read [UPGRADE_IMPLEMENTATION_PLAN.md](UPGRADE_IMPLEMENTATION_PLAN.md) before broader architecture changes. AGENTS.md names Codex models (Sol/Terra/Astra); ignore those, the orchestration rules below replace them for Claude Code.
+
+## Hard rules
+
+- No push, merge, deployment, production migration, or live provider call without explicit user authorization in chat. Git work stays local.
+- `ENABLE_PROVIDER_CALLS` defaults to `false`. Do not enable it or add a paid fallback without verified free-only account access.
+- Never reset durable usage counters or token-owned active slots to bypass limits.
+- Keep `.env`, cookies, transcripts, and `output/` evidence out of Git. Use `.env.example` as the template.
+- Preserve job/vector isolation, temporary-file cleanup, and bounded-memory media processing (target: 512 MiB container).
+- Tests use mocked providers and disposable data only. Cleanup and integration tests run against a disposable database.
+
+## Commands
+
+Backend (repo root, Python 3.11, system `ffmpeg`):
+
+```bash
+python3.11 -m venv .venv
+.venv/bin/python -m pip install -r backend/requirements.lock
+.venv/bin/python scripts/prepare_reranker.py          # required FlashRank/TinyBERT assets
+.venv/bin/python -m uvicorn backend.api:app --host 127.0.0.1 --port 8000 --reload --no-access-log
+```
+
+`--no-access-log` matters: access logs would leak bearer job IDs.
+
+Backend tests (offline; DB tests skip unless `TEST_DATABASE_URL` points at disposable loopback Postgres with pgvector):
+
+```bash
+PYTHON_DOTENV_DISABLED=1 .venv/bin/python -m unittest discover -s tests -v
+PYTHON_DOTENV_DISABLED=1 .venv/bin/python -m unittest tests.test_guardrails -v                      # one module
+PYTHON_DOTENV_DISABLED=1 .venv/bin/python -m unittest tests.test_guardrails.SomeTestCase.test_name   # one test
+```
+
+CI runs the same suite inside the built Docker image against `pgvector/pgvector:0.8.1-pg16`, then a 512 MiB / 0.1 CPU workload gate (`python -m scripts.benchmark_recruiter_demo <clip> --linux-gate`) and a Trivy OS scan. See `.github/workflows/ci.yml`.
+
+Frontend (`web/`, Node 22 or 24):
+
+```bash
+npm ci
+npm run dev -- --host 127.0.0.1     # http://127.0.0.1:5173, proxies to localhost:8000
+npm test                            # node --test src/api.test.js
+npm run build
+```
+
+Browser checks (repo root, Vite running; set `AVA_PLAYWRIGHT_MODULE` to a local Playwright `index.mjs`):
+
+```bash
+AVA_FRONTEND_TEST_URL=http://127.0.0.1:5173 AVA_BACKEND_TEST_URL=https://sample-fixture.invalid node web/tests/sample.browser.mjs
+```
+
+`web/tests/live-session.browser.mjs` covers the live flow with intercepted API responses. Release-script test: `node --test scripts/release_vercel.test.mjs`.
+
+MCP Worker (`mcp-server/`, Node 24): `npm ci`, `npm run typecheck`, `npm test`, `npm run build` (dry-run deploy only).
+
+Docker: `docker build -t ai-video-backend .`. In-container `DATABASE_URL` must reach a DB host other than the container's own loopback.
+
+Recovery (private terminal, old workers stopped, admissions suspended): `python -m backend.recover inspect`. Runbook in ROADMAP_STATUS.md.
+
+`python -m backend.cli` makes real provider calls. Use it only for authorized smoke tests.
+
+## Architecture
+
+Request path: `web/src/api.js` (only place for backend fetches) → `backend/api.py` routes (`POST /jobs`, `GET /jobs/{id}`, `/result`, `/chat`, `DELETE`, `/admin/cleanup`, `/health`, `/ready`, `/demo-mode`).
+
+- **Admission and auth** (`api.py`, `usage_limits.py`, `core/provider_budget.py`): Postgres-backed quotas (per client, per job, global daily caps), one global processing slot and one chat slot. Rejected admission rolls back counters; failed admitted work still consumes allowance. `429` includes `Retry-After`. Limiter/DB/config failure returns `503` before any inference. Status, result, chat, and delete require a job-bound HMAC bearer token (`JOB_TOKEN_SECRET`, 48 h). Client identity is the connection address, never forwarded headers.
+- **Demo modes**: `DEMO_LIVE_MODE` is `sample` (default, live analysis off), invited (`DEMO_INVITE_CODE`), or public. `/sample` in the SPA serves prepared fixtures (`web/src/fixtures`) without contacting the backend.
+- **Job pipeline** (`jobs.py` `run_job`, background task): `utils/audio_processor.py` streams media into chunks → `core/transcriber.py` (Groq Whisper, optional Sarvam, profiles in `STT_PROFILES_JSON`) → `core/chunks.py` timestamped sanitized documents → `core/guardrails.py` validation → `core/summarizer.py` title + summary → `core/extractor.py` findings → `core/rag_engine.py` indexing. `db.set_step` records progress for polling. `core/audio_budget.py` enforces size/duration limits.
+- **Hybrid RAG chat** (`core/retrieval.py`, `core/reranker.py`, `core/vector_store.py`): dense pgvector + BM25, 10 candidates each, merged by RRF, required local FlashRank TinyBERT cross-encoder reranks up to 12, top 4 passages go to a grounded, cited answer. `core/guardrails.py` validates grounding.
+- **Provider routing** (`core/llm_gateway.py`, `core/embedding_routes.py`): LangChain LCEL + LiteLLM over routes in `LLM_ROUTES_JSON` / `EMBEDDING_ROUTES_JSON`. Embedding indexing can fail over on a transient error, then pins the successful route on the job for chat.
+- **Persistence** (`db.py`): jobs, `transcript_chunks`, LangChain pgvector tables. Delete and scheduled cleanup (`.github/workflows/cleanup.yml`) remove job, chunks, and vector collection in one transaction, skip active jobs, and keep usage counters.
+- **Telemetry** (`core/telemetry.py`): metrics and durations only, no transcript or token content.
+- **MCP Worker** (`mcp-server/src`): Cloudflare Worker exposing four read-only tools over Streamable HTTP at `/mcp`, reading explicitly shared jobs through restricted Hyperdrive. Docs in `docs/mcp-cloudflare/`.
+- **Release scripts** (`scripts/release_*.{py,mjs}`, `.github/workflows/release.yml`): Render, Vercel, Worker deployments. Never run without authorization.
+
+## Conventions
+
+Python: 4-space indent, `snake_case`; provider logic stays in `backend/core/`. JS/JSX: 2-space indent, `camelCase` functions, `PascalCase` components; match surrounding quotes and semicolons. No formatter or linter configured. Commits use `feat:`, `fix:`, `docs:`, `ci:` prefixes. Add focused regression tests for behavior changes.
+
+## Orchestration: Opus orchestrates, Sonnet executes
+
+The main session (Opus) plans, splits work, assigns file ownership, reviews results, integrates, and verifies the combined outcome. It does not write bulk code itself when delegation fits.
+
+Delegate with the `Agent` tool and `model: "sonnet"` for:
+
+- Implementation and bug fixes: `general-purpose`, or `caveman:cavecrew-builder` for bounded 1-2 file edits.
+- Code review: `caveman:cavecrew-reviewer` or `general-purpose` with the `code-review` / `ponytail-review` skill.
+- Tests: writing and running unittest, `npm test`, browser checks.
+- Codebase search and mapping: `Explore` or `caveman:cavecrew-investigator`.
+- Docs edits, small refactors, release-script dry runs.
+
+Keep on Opus: architecture decisions, `Plan` agent output review, security-sensitive changes (quotas, tokens, cleanup transactions, isolation), and final verification.
+
+Delegation rules:
+
+- Parallelize independent tasks in one message. Keep dependent tasks sequential. Never give two agents the same file. Use `isolation: "worktree"` when parallel writers might overlap.
+- Each prompt states scope, owned files, done criteria, the exact test command, and the hard rules above (no push, no live providers, `PYTHON_DOTENV_DISABLED=1`).
+- Tell each subagent to check installed skills, plugins, and MCP tools first and use purpose-built ones.
+- Treat a subagent report as a claim. Check the diff and rerun tests before reporting done.
+
+Useful tools on this machine:
+
+- Skills: `superpowers:test-driven-development`, `superpowers:systematic-debugging`, `superpowers:verification-before-completion`, `superpowers:writing-plans`, `superpowers:dispatching-parallel-agents`, `code-review`, `security-review`, `simplify`.
+- Cloudflare skills for `mcp-server/`: `workers-development`, `cf-cli`, `gateway-workers`.
+- Browser: built-in browser pane (`mcp__Claude_Browser__*`) for `http://127.0.0.1:5173` and `/sample`; Playwright plugin for scripted checks.
+- GitHub: `gh` CLI for PR and CI status (read-only unless authorized). The GitHub MCP plugin needs `/mcp` auth first.
+- Docs lookups via `WebFetch` for FastAPI, LangChain, LiteLLM, pgvector, Wrangler APIs.

@@ -8,7 +8,7 @@ Live results show chat beside the summary and findings on desktop and above them
 
 **Try a demo video** on the home page loads a named recording into the upload form. The two bundled MP4s use original fictional scripts and synthetic speech generated locally with [CMU Flite](https://github.com/festvox/flite/tree/v2.2). The visitor clicks **Analyse** to start a job, subject to live-mode, invite, and quota checks. For a user-selected file, the form explains before submission that audio goes to a transcription provider and that clips must contain synthetic or public, non-personal material.
 
-To add a clip from Google Drive, download the MP4 as the project maintainer. Verify that its license allows redistribution, record the source and required attribution, and use a non-personal English clip with audible speech, at most 10 MiB and 120 seconds. Add the MP4 to `web/public/demo-clips/` and its display title and filename to the catalog in `web/src/components/Empty.jsx`. Vite publishes these assets with the frontend, so visitors load them from the Minutes site. [Google Drive download options](https://developers.google.com/workspace/drive/api/guides/manage-downloads)
+To add a clip from Google Drive, download the recording as the project maintainer. Verify that its license allows redistribution, record the source and required attribution, and use a non-personal English clip with audible speech. Encode its audio only (`ffmpeg -i input -t 600 -vn -ac 1 -ar 16000 -c:a libmp3lame -b:a 48k name.mp3`) and add the MP3 to `web/public/demo-clips/` and its display title and filename to the catalog in `web/src/components/Empty.jsx`. Vite publishes these assets with the frontend, so visitors load them from the Minutes site. [Google Drive download options](https://developers.google.com/workspace/drive/api/guides/manage-downloads)
 
 ## Live modes
 
@@ -20,7 +20,7 @@ To add a clip from Google Drive, download the MP4 as the project maintainer. Ver
 
 Configure distinct random values for `DEMO_INVITE_CODE`, `JOB_TOKEN_SECRET`, and `RATE_LIMIT_SECRET` on the backend. Keep the signing secret stable across restarts. Rotating it invalidates existing session tokens. The browser stores the current job ID and its 48-hour token in same-tab session storage. Refresh resumes status checks. Explicit deletion removes the job and its index. The scheduled cleanup sweep makes terminal records eligible after 24 hours and skips active jobs. Actual deletion depends on the sweep running successfully.
 
-Use only synthetic or permitted non-personal clips. The demo allows up to 10 MiB and 120 seconds per upload. It starts with one upload per client and five globally per UTC day, two chat requests per client per minute, three per job per day, and 15 globally per day. Admit at most one processing job and one chat at a time. Retain the [operator recovery procedure](ROADMAP_STATUS.md#recovery-after-an-interrupted-process) for interrupted work.
+Use only synthetic or permitted non-personal clips. The demo allows up to 25 MiB per upload and analyses the first 10 minutes. It starts with one upload per client and five globally per UTC day, two chat requests per client per minute, three per job per day, and 15 globally per day. Admit at most one processing job and one chat at a time. Retain the [operator recovery procedure](ROADMAP_STATUS.md#recovery-after-an-interrupted-process) for interrupted work.
 
 ## Local browser checks
 

@@ -41,16 +41,20 @@ def _max_seconds() -> float:
     value = float(os.getenv("MAX_MEDIA_SECONDS", "").strip() or "600")
     if not math.isfinite(value) or value <= 0:
         raise ValueError("MAX_MEDIA_SECONDS must be finite and positive.")
-    return min(value, 120)
+    # 10 minutes keeps the one-call findings transcript (~10K chars) inside every route's input limit.
+    return min(value, 600)
 
 
-def _validate_duration(value) -> None:
+def _validate_duration(value, *, allow_trim: bool = False) -> None:
+    """Reject unknown durations; longer uploads may be trimmed to the cap by ffmpeg's -t."""
     try:
         duration = float(value)
     except (TypeError, ValueError):
         raise MediaValidationError("Media duration is unknown.") from None
-    if not math.isfinite(duration) or duration <= 0 or duration > _max_seconds():
+    if not math.isfinite(duration) or duration <= 0 or (duration > _max_seconds() and not allow_trim):
         raise MediaValidationError("Media duration is invalid or exceeds the limit.")
+    if duration > _max_seconds():
+        metric("media_trimmed", source_seconds=round(duration), analysed_seconds=round(_max_seconds()))
 
 
 def validate_youtube_url(url: str) -> str:
@@ -138,7 +142,8 @@ def chunk_streaming(raw_path: str, chunk_minutes: int = CHUNK_MINUTES) -> tuple[
         )
     except subprocess.CalledProcessError:
         raise MediaValidationError("The media is corrupt or uses an unsupported format.") from None
-    _validate_duration(probe.stdout.decode("utf-8", "replace").strip())
+    # Uploads are already on disk, so analyse the first MAX_MEDIA_SECONDS instead of rejecting them.
+    _validate_duration(probe.stdout.decode("utf-8", "replace").strip(), allow_trim=True)
     chunk_dir = tempfile.mkdtemp(prefix="avassist_chunks_")
     pattern = os.path.join(chunk_dir, "chunk_%03d.wav")
 

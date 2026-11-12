@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from backend.core import audio_budget, transcriber
 from backend.usage_limits import LimitExceeded
+from stt_fixture import groq_chain
 
 PROFILE = {'provider': 'groq', 'model': 'whisper-large-v3-turbo', 'keyenv': 'GROQ_API_KEY', 'verified_free': True, 'rpm': 2, 'rpd': 3, 'audio_seconds_hour': 30, 'audio_seconds_day': 60}
 
@@ -147,8 +148,12 @@ class AudioBudgetDatabaseTests(unittest.TestCase):
                 conn.execute(f'DROP SCHEMA {schema} CASCADE')
 
 class TimestampBoundaryTests(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(groq_chain())
+
     def test_submillisecond_out_of_bounds_and_reverse_times_are_rejected(self):
-        cases = [(-0.0001, 0.1), (0, 1.0001), (0.3004, 0.3003)]
+        # A 0.1 ms end overshoot is clamped to the chunk (see test_timestamps); larger errors still fail.
+        cases = [(-0.0001, 0.1), (0, 2.0001), (0.3004, 0.3003)]
         for start, end in cases:
             with self.subTest(start=start, end=end), patch('backend.core.transcriber._wav_duration_ms', return_value=1000), patch('backend.core.transcriber._groq_segments', return_value=[{'text': 'hello', 'start': start, 'end': end}]):
                 with self.assertRaises(ValueError):

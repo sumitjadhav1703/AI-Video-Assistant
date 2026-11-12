@@ -21,7 +21,11 @@ from . import provider_budget
 MAX_TRANSCRIPT_CHARS = 40000
 _OPERATION = ContextVar('provider_operation', default=None)
 _KEYS = {'groq': 'GROQ_API_KEY', 'gemini': 'GEMINI_API_KEY', 'nvidia_nim': 'NVIDIA_API_KEY', 'openrouter': 'OPENROUTER_API_KEY', 'meta': 'META_API_KEY'}
-_FIXED_MODELS = {'nvidia_nim': 'nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b', 'openrouter': 'openrouter/meta-llama/llama-3.2-3b-instruct:free', 'meta': 'meta/muse-spark-1.3'}
+_FIXED_MODELS = {'nvidia_nim': 'nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b', 'meta': 'meta/muse-spark-1.3'}
+TASKS = ('title', 'summary', 'extract', 'chat')
+# Reasoning that cannot be switched off spends small output caps: Meta needs ~350 tokens for a title.
+_MIN_OUTPUT_TOKENS = {'meta': 512}
+MAX_ROUTES = 8
 _BASES = {'groq': 'https://api.groq.com/openai/v1', 'nvidia_nim': 'https://integrate.api.nvidia.com/v1', 'openrouter': 'https://openrouter.ai/api/v1', 'meta': 'https://api.meta.ai/v1'}
 _ORDER = {'groq': 0, 'nvidia_nim': 1, 'openrouter': 2, 'gemini': 3, 'meta': 4}
 
@@ -86,6 +90,11 @@ def current_operation() -> str:
     return job_id['job_id']
 
 
+def owner_paid_operation() -> bool:
+    operation = _OPERATION.get() or {}
+    return bool(operation.get('owner') and operation.get('allow_paid'))
+
+
 def local_owner_operation() -> bool:
     return (_OPERATION.get() or {}).get('local_owner', False)
 
@@ -95,7 +104,7 @@ def _routes() -> list[Route]:
         raw = json.loads(os.getenv('LLM_ROUTES_JSON', '[]'))
     except (TypeError, ValueError):
         raise ValueError('LLM_ROUTES_JSON must contain a route list') from None
-    if not isinstance(raw, list) or not raw or len(raw) > 6:
+    if not isinstance(raw, list) or not raw or len(raw) > MAX_ROUTES:
         raise ValueError('Configure explicit verified free model routes before generation')
     result = []
     for item in raw:
@@ -131,6 +140,9 @@ def ensure_route_compatible(route) -> None:
         r'gemini/gemini-(?:flash-latest|[0-9]+\.[0-9]+-flash(?:-lite)?(?:-[A-Za-z0-9-]+)?)', route.model,
     ):
         raise ValueError('Gemini generation requires an explicit Flash model')
+    # OpenRouter also enforces max_price 0 on every request, so only ':free' variants can bill nothing.
+    if route.provider == 'openrouter' and not re.fullmatch(r'openrouter/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+:free', route.model):
+        raise ValueError('OpenRouter routes require a :free model')
     if route.provider in _FIXED_MODELS and route.model != _FIXED_MODELS[route.provider]:
         raise ValueError('Unsupported fixed provider model')
     if route.provider == 'meta' and route.verified_free:
@@ -213,10 +225,20 @@ def _invoke_route(route: Route, messages, temperature: float, timeout: float, ma
     payload = [{'role': roles[message.type], 'content': message.content} for message in messages]
     options = {'model': route.alias, 'messages': payload, 'temperature': temperature,
                'max_tokens': max_output_tokens, 'stream': False}
-    if route.provider == 'nvidia_nim':
+    if route.provider == 'groq' and '/gpt-oss-' in route.model:
+        # Default reasoning spends small output caps (e.g. the 128-token title) and returns empty content.
+        options['reasoning_effort'] = 'low'
+    elif route.provider == 'nvidia_nim':
         options['extra_body'] = {'chat_template_kwargs': {'enable_thinking': False}}
     elif route.provider == 'openrouter':
-        options['extra_body'] = {'provider': {'allow_fallbacks': False, 'max_price': {'prompt': 0, 'completion': 0, 'request': 0}}}
+        options['extra_body'] = {'provider': {'allow_fallbacks': False, 'max_price': {'prompt': 0, 'completion': 0, 'request': 0}},
+                                 'reasoning': {'enabled': False}}
+    elif route.provider == 'gemini':
+        # Every gateway caller parses JSON; without native JSON mode Gemini answers chat in prose.
+        options['response_format'] = {'type': 'json_object'}
+        if route.model.startswith('gemini/gemini-2.5-'):
+            # 2.5 thinking spends the output cap (a 128-token title came back as 'Here is the JSON').
+            options['reasoning_effort'] = 'disable'
     elif route.provider == 'meta':
         options.pop('max_tokens')
         options.update(max_completion_tokens=max_output_tokens, reasoning_effort='minimal')
@@ -295,11 +317,23 @@ def _retry_after(error):
         return 60
 
 
+class _UnusableOutput(ValueError):
+    """Empty, truncated, refused or unparseable output: try the next route."""
+
+
 class GuardedChat(Runnable):
-    def __init__(self, routes: list[Route], temperature: float, max_output_tokens: int):
+    def __init__(self, routes: list[Route], temperature: float, max_output_tokens: int, validate=None):
         self.routes = routes
         self.temperature = temperature
         self.max_output_tokens = max_output_tokens
+        self.validate = validate
+
+    def with_validator(self, validate):
+        """Copy whose routes must also return content accepted by validate(content), else fall back."""
+        return GuardedChat(self.routes, self.temperature, self.max_output_tokens, validate)
+
+    def _output_cap(self, route):
+        return min(1024, max(self.max_output_tokens, _MIN_OUTPUT_TOKENS.get(route.provider, 0)))
 
     def invoke(self, input, config=None, **kwargs) -> AIMessage:
         from .guardrails import sanitize_text
@@ -337,7 +371,8 @@ class GuardedChat(Runnable):
             if remaining <= 0:
                 raise RuntimeError('Generation deadline exceeded')
             try:
-                attempt_id = provider_budget.reserve_attempt(job_id, route, input_tokens, output_tokens=self.max_output_tokens)
+                output_cap = self._output_cap(route)
+                attempt_id = provider_budget.reserve_attempt(job_id, route, input_tokens, output_tokens=output_cap)
             except provider_budget.RouteQuotaExceeded as error:
                 retry_delays.append(error.retry_after)
                 continue
@@ -351,15 +386,23 @@ class GuardedChat(Runnable):
             try:
                 routes_left = len(eligible) - index
                 timeout = min(12, remaining / routes_left) if routes_left > 1 else remaining
-                response = _invoke_route(route, messages, self.temperature, timeout, self.max_output_tokens)
+                response = _invoke_route(route, messages, self.temperature, timeout, output_cap)
                 if (not isinstance(response, AIMessage) or not isinstance(response.content, str)
                         or not response.content.strip() or response.tool_calls or response.invalid_tool_calls
                         or response.additional_kwargs.get('refusal')
                         or response.response_metadata.get('finish_reason') in ('content_filter', 'refusal', 'tool_calls', 'error')):
-                    raise ValueError('Generation provider returned unsupported content')
+                    raise _UnusableOutput('Generation provider returned unsupported content')
+                if self.validate is not None:
+                    try:
+                        self.validate(response.content)
+                    except (ValueError, TypeError):
+                        raise _UnusableOutput('Generation provider returned invalid structured output') from None
             except Exception as error:
                 if type(attempt_id) is int:
                     provider_budget.record_attempt_result(attempt_id, 'failed', max(0, int((time.monotonic() - started) * 1000)))
+                if isinstance(error, _UnusableOutput):
+                    mixed_failure = True
+                    continue
                 if _transient(error):
                     identity = (route.provider, route.model)
                     if getattr(error, 'status_code', None) == 429:
@@ -371,7 +414,11 @@ class GuardedChat(Runnable):
                         operation['failed'][identity] = None
                         mixed_failure = True
                     continue
-                raise RuntimeError('Generation provider request failed') from None
+                # Auth, bad request, model removed: this route is broken for the job, so skip it from now on
+                # and try the next one rather than failing the job.
+                operation['failed'][(route.provider, route.model)] = None
+                mixed_failure = True
+                continue
             if type(attempt_id) is int:
                 usage = getattr(response, 'usage_metadata', None) or {}
                 provider_budget.record_attempt_result(attempt_id, 'success', max(0, int((time.monotonic() - started) * 1000)),
@@ -392,16 +439,44 @@ def _eligible(route: Route, operation) -> bool:
     if not os.getenv(route.api_key_env, '').strip():
         return False
     if route.provider == 'meta':
-        if not (operation['owner'] and operation['allow_paid'] and os.getenv('ENABLE_PAID_META', '').strip().lower() == 'true'):
+        if os.getenv('ENABLE_PAID_META', '').strip().lower() != 'true':
+            return False
+        # Public last resort stays inside provider_budget's paid caps (one attempt and $0.01 per job, $0.05 per day).
+        if not ((operation['owner'] and operation['allow_paid']) or _flag('ENABLE_PUBLIC_PAID_FALLBACK')):
             return False
         if any(not isinstance(price, str) or not re.fullmatch(r'[0-9]{1,6}(?:\.[0-9]{1,6})?', price)
                for price in (route.input_price_per_million, route.output_price_per_million)):
             raise ValueError('Paid route prices must be bounded decimal strings')
         return True
-    return route.verified_free and (route.provider != 'nvidia_nim' or operation['owner'])
+    return route.verified_free and (route.provider != 'nvidia_nim' or operation['owner'] or _flag('ENABLE_NVIDIA_PUBLIC'))
 
 
-def get_llm(temperature: float = 0.3, *, tier: str = 'economy', max_output_tokens: int = 1024) -> Runnable:
+def _flag(name: str) -> bool:
+    return os.getenv(name, '').strip().lower() == 'true'
+
+
+def _task_order(task: str | None, routes: list[Route]) -> list[Route]:
+    """Preferred aliases for the task first, then every other route in default provider order."""
+    if task is None:
+        return routes
+    if task not in TASKS:
+        raise ValueError('Unsupported generation task')
+    try:
+        mapping = json.loads(os.getenv('LLM_TASK_ROUTES_JSON', '{}'))
+    except (TypeError, ValueError):
+        raise ValueError('LLM_TASK_ROUTES_JSON must map tasks to route aliases') from None
+    known = {route.alias for route in _routes()}
+    if (not isinstance(mapping, dict) or set(mapping) - set(TASKS)
+            or any(not isinstance(aliases, list) or len(set(aliases)) != len(aliases)
+                   or any(alias not in known for alias in aliases) for aliases in mapping.values())):
+        raise ValueError('LLM_TASK_ROUTES_JSON must map known tasks to unique configured aliases')
+    preferred = mapping.get(task, [])
+    return sorted(routes, key=lambda route: (route.provider == 'meta',
+                                             preferred.index(route.alias) if route.alias in preferred else len(preferred)))
+
+
+def get_llm(temperature: float = 0.3, *, tier: str = 'economy', max_output_tokens: int = 1024,
+            task: str | None = None) -> Runnable:
     require_provider_calls()
     assert_private_runtime()
     if type(max_output_tokens) is not int or not 1 <= max_output_tokens <= 1024:
@@ -412,28 +487,60 @@ def get_llm(temperature: float = 0.3, *, tier: str = 'economy', max_output_token
     routes = [route for route in _routes() if route.tier == tier and _eligible(route, operation)]
     if not routes:
         raise ValueError('No eligible generation route configured for the requested tier')
-    selected = []
-    for route in routes:
-        if all(existing.provider != route.provider for existing in selected):
-            selected.append(route)
-    return GuardedChat(selected, temperature, max_output_tokens)
+    return GuardedChat(_task_order(task, routes), temperature, max_output_tokens)
 
 
 def input_token_bound(messages) -> int:
     return sum(len(message.content.encode('utf-8')) + 64 for message in messages) + 64
 
 
+def plain_schema(schema: type[BaseModel]) -> dict:
+    """JSON schema without '$defs' references or metadata titles, which models echo back as fields."""
+    raw = schema.model_json_schema()
+    defs = raw.pop('$defs', {})
+
+    def clean(node, in_properties=False):
+        if isinstance(node, list):
+            return [clean(item) for item in node]
+        if not isinstance(node, dict):
+            return node
+        if '$ref' in node:
+            return clean(defs[node['$ref'].rsplit('/', 1)[-1]])
+        return {key: clean(value, key == 'properties') for key, value in node.items()
+                if in_properties or not (key == 'title' and isinstance(value, str))}
+    return clean(raw)
+
+
 def structured_messages(system_prompt: str, text: str, schema: type[BaseModel]):
     from .guardrails import sanitize_text
     from langchain_core.messages import SystemMessage
-    instruction = system_prompt + '\nReturn only JSON conforming exactly to this schema: ' + json.dumps(schema.model_json_schema())
+    instruction = (system_prompt + '\nReturn only one JSON object holding the data itself (never the schema), '
+                   'using exactly these fields: ' + json.dumps(plain_schema(schema), separators=(',', ':')))
     return [SystemMessage(content=instruction), HumanMessage(content=sanitize_text(text))]
 
 
-def structured_call(system_prompt: str, text: str, schema: type[BaseModel], *, temperature: float = 0.3, max_output_tokens: int = 1024):
+def strip_json_fence(content: str) -> str:
+    """Model JSON without a Markdown fence or a prose preamble ('Here is the JSON: {...}')."""
+    content = re.sub(r'\A\s*```(?:json)?\s*\n(.*?)\n\s*```\s*\Z', r'\1', content, flags=re.DOTALL).strip()
+    start, end = content.find('{'), content.rfind('}')
+    if not content.startswith('{') and 0 <= start < end:
+        return content[start:end + 1]
+    return content
+
+
+def structured_call(system_prompt: str, text: str, schema: type[BaseModel], *, temperature: float = 0.3,
+                    max_output_tokens: int = 1024, task: str | None = None, check=None):
+    """Schema-valid result; a route whose output fails the schema or check falls back to the next route."""
+    def parse(content):
+        parsed = schema.model_validate_json(strip_json_fence(content))
+        if check is not None:
+            check(parsed)
+        return parsed
+
     assert_private_runtime()
-    result = get_llm(temperature, max_output_tokens=max_output_tokens).invoke(structured_messages(system_prompt, text, schema))
+    llm = get_llm(temperature, max_output_tokens=max_output_tokens, task=task).with_validator(parse)
+    result = llm.invoke(structured_messages(system_prompt, text, schema))
     try:
-        return schema.model_validate_json(result.content)
+        return parse(result.content)
     except ValueError:
         raise ValueError('Generation returned invalid structured output') from None

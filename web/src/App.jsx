@@ -229,7 +229,7 @@ export default function App() {
     try {
       const response = await askChat(session, question);
       setChat((messages) => messages.map((message) => message.id === id
-        ? { ...message, a: response.answer, citations: response.citations, model: response.model, retrieval: response.retrieval, pending: false }
+        ? { ...message, a: response.answer, abstained: response.abstained, citations: response.citations, model: response.model, retrieval: response.retrieval, pending: false }
         : message));
     } catch (error) {
       if (expired(error)) clearSession(EXPIRED_NOTICE);

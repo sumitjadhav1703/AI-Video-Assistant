@@ -88,72 +88,55 @@ export default function Chat({ chat, onAsk, source, economyOnly, presetQuestions
           )}
 
           <div className="chat-thread" aria-live="polite" aria-relevant="additions text">
-            {chat.map((msg) => (
-              <div key={msg.id} style={{ animation: 'fadeUp .45s ease both' }}>
+            {chat.map((msg) => {
+              const abstained = !msg.pending && msg.abstained === true;
+              return (
+              <div key={msg.id} className="chat-turn">
                 {!presetQuestions && (
-                  <p
-                    style={{
-                      margin: '0 0 var(--chat-question-gap, 16px)',
-                      fontFamily: SANS,
-                      fontWeight: 500,
-                      fontSize: 'var(--chat-question-size, clamp(22px,2.4vw,30px))',
-                      lineHeight: 1.3,
-                      letterSpacing: '-0.01em',
-                    }}
-                  >
-                    {msg.q}
-                  </p>
+                  <div className="chat-q">
+                    <span className="chat-q-label">You asked</span>
+                    <p className="chat-q-text">{msg.q}</p>
+                  </div>
                 )}
-                <div style={{ borderLeft: '1px solid rgba(232,229,222,0.25)', paddingLeft: 'var(--chat-answer-gutter, 24px)' }}>
+                <div className={`chat-a${abstained ? ' chat-a-abstained' : ''}`}>
                   {msg.pending ? (
-                    <span
-                      style={{
-                        fontFamily: MONO,
-                        fontSize: 11,
-                        letterSpacing: '0.05em',
-                        color: MUTE,
-                        animation: 'pulseDot 1.2s ease infinite',
-                      }}
-                    >
+                    <span style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.05em', color: MUTE, animation: 'pulseDot 1.2s ease infinite' }}>
                       Reading the transcript…
                     </span>
                   ) : (
-                    <p style={{ margin: 0, fontSize: 15, lineHeight: 1.75, color: SUBTLE, whiteSpace: 'pre-wrap' }}>
-                      {msg.a}
-                    </p>
+                    <>
+                      <p className="chat-a-text">{msg.a}</p>
+                      {abstained && <p className="chat-a-hint">Try rephrasing or ask about something mentioned in the recording.</p>}
+                    </>
                   )}
                   {!msg.pending && msg.citations?.length > 0 && (
-                    <div style={{ marginTop: 16, color: SUBTLE, fontSize: 13 }}>
-                      <strong>Sources</strong>
+                    <div className="chat-sources">
+                      <strong className="chat-sources-label">Sources</strong>
                       {msg.citations.map((citation, index) => {
                         const timed = citation.timing_precision !== 'unknown' && citation.start_ms != null;
+                        const range = timed
+                          ? `${citation.timing_precision === 'piece' ? '~' : ''}${formatTime(citation.start_ms)}${citation.end_ms == null ? '' : `–${formatTime(citation.end_ms)}`}`
+                          : null;
                         const href = timed ? sourceLink(source, citation.start_ms) : null;
-                        let sourceControl = <span>{citation.chunk_id}</span>;
+                        let chip = range && <span className="chat-chip">{range}</span>;
                         if (timed && onSeek) {
-                          sourceControl = (
-                            <button type="button" className="demo-sample-control" onClick={() => onSeek(citation.start_ms)}>
-                              Jump to {formatTime(citation.start_ms)}
-                            </button>
-                          );
+                          chip = <button type="button" className="chat-chip" aria-label={`Jump to ${range}`} onClick={() => onSeek(citation.start_ms)}>{range}</button>;
                         } else if (href) {
-                          sourceControl = <a href={href} target="_blank" rel="noreferrer" style={{ color: CREAM }}>Open source at {formatTime(citation.start_ms)}</a>;
+                          chip = <a className="chat-chip" href={href} target="_blank" rel="noreferrer" aria-label={`Open source at ${range}`}>{range}</a>;
                         }
                         return (
-                          <p key={`${citation.chunk_id}-${index}`} style={{ lineHeight: 1.6 }}>
-                            {sourceControl}
-                            {' · '}{!timed || citation.end_ms == null
-                              ? 'Time unavailable'
-                              : `${citation.timing_precision === 'piece' ? 'Approx. ' : ''}${formatTime(citation.start_ms)}–${formatTime(citation.end_ms)}`}
-                            {' · '}{citation.text}
-                          </p>
+                          <div key={`${citation.chunk_id}-${index}`} className="chat-cite">
+                            {chip}
+                            <q className="chat-cite-text">{citation.text}</q>
+                          </div>
                         );
                       })}
                     </div>
                   )}
-                  {!msg.pending && msg.model?.tier && <p style={{ color: MUTE, fontSize: 12 }}>Model tier: {msg.model.tier}</p>}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
 
           {!presetQuestions && <>

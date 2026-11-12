@@ -13,6 +13,31 @@ class EvidenceTests(unittest.TestCase):
             [doc(0, 'Alice will ship Friday.')])
         self.assertEqual(result, {'answer': rag_engine.ABSTENTION, 'abstained': True, 'citations': []})
 
+    def test_markdown_fenced_json_answer_is_accepted(self):
+        raw = ('```json\n{"answer": "Alice ships Friday.", "abstained": false, '
+               '"evidence": [{"chunk_id": "a:000000", "quote": "ship Friday"}]}\n```')
+        result = rag_engine.validate_grounded_answer(raw, [doc(0, 'Alice will ship Friday.')])
+        self.assertFalse(result['abstained'])
+        self.assertEqual(result['citations'][0]['text'], 'ship Friday')
+
+    def test_case_only_quote_mismatch_cites_transcript_wording(self):
+        result = rag_engine.validate_grounded_answer(
+            {'answer': 'Alice ships Friday.', 'abstained': False,
+             'evidence': [{'chunk_id': 'a:000000', 'quote': 'alice will ship'}]},
+            [doc(0, 'Alice will ship Friday.')])
+        self.assertFalse(result['abstained'])
+        self.assertEqual(result['citations'][0]['text'], 'Alice will ship')
+
+    def test_chat_validator_rejects_bad_output_so_the_next_route_answers(self):
+        docs = [doc(0, 'Alice will ship Friday.')]
+        valid = '{"answer": "Friday.", "abstained": false, "evidence": [{"chunk_id": "a:000000", "quote": "ship Friday"}]}'
+        rag_engine._require_grounded(valid, docs)
+        rag_engine._require_grounded('{"answer": "Not found.", "abstained": true, "evidence": []}', docs)
+        for bad in ('Friday (a:000000)', '{"answer": "Monday.", "abstained": false, '
+                    '"evidence": [{"chunk_id": "a:000000", "quote": "ship Monday"}]}'):
+            with self.assertRaises(ValueError):
+                rag_engine._require_grounded(bad, docs)
+
     def test_whitespace_answer_abstains_even_with_a_valid_quote(self):
         result = rag_engine.validate_grounded_answer(
             {'answer': '   ', 'abstained': False,
@@ -37,5 +62,5 @@ class EvidenceTests(unittest.TestCase):
                 patch.object(rag_engine, 'load_ranker'), patch.object(rag_engine, 'get_llm') as model:
             result = rag_engine._answer_question('question', 'a', 'economy', [], Mock())
         self.assertTrue(result['abstained'])
-        model.assert_called_once_with(tier='economy')
+        model.assert_called_once_with(tier='economy', task='chat')
         model.return_value.invoke.assert_not_called()

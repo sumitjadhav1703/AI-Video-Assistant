@@ -171,6 +171,20 @@ input::placeholder { color: #57544e; }
 .live-results .chat-thread { gap: 20px; }
 .live-results .chat-thread:not(:empty) { margin-bottom: 18px; }
 .chat-compose { display: flex; gap: 14px; }
+.chat-turn { animation: fadeUp .45s ease both; min-width: 0; }
+.chat-q { margin-bottom: 12px; }
+.chat-q-label, .chat-sources-label { display: block; font: 400 11px 'Space Grotesk', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #6f6c65; margin-bottom: 4px; }
+.chat-q-text { margin: 0; font-size: 15px; line-height: 1.5; color: #a19e96; overflow-wrap: anywhere; }
+.chat-a { border-left: 2px solid rgba(232, 229, 222, .4); padding-left: 16px; min-width: 0; }
+.chat-a-text { margin: 0; font-size: 16px; line-height: 1.65; color: #e8e5de; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-a-abstained { border-left-color: rgba(232, 229, 222, .15); }
+.chat-a-abstained .chat-a-text { color: #a19e96; font-style: italic; }
+.chat-a-hint { margin: 6px 0 0; font-size: 13px; color: #6f6c65; }
+.chat-sources { margin-top: 14px; display: grid; gap: 8px; }
+.chat-cite { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.chat-chip { flex: none; font: 400 12px 'Space Grotesk', sans-serif; color: #e8e5de; background: rgba(232, 229, 222, .08); border: 1px solid rgba(232, 229, 222, .2); border-radius: 999px; padding: 2px 9px; text-decoration: none; }
+button.chat-chip, a.chat-chip { cursor: pointer; min-height: 24px; }
+.chat-cite-text { font-size: 13px; line-height: 1.5; color: #a19e96; font-style: italic; min-width: 0; overflow-wrap: anywhere; }
 
 @media (max-width: 740px) {
   .live-results-workspace { grid-template-columns: minmax(0, 1fr); gap: 16px; }

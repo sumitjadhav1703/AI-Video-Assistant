@@ -1,8 +1,25 @@
 import unittest
 from unittest.mock import patch
 from backend.core.transcriber import transcribe_segments
+from stt_fixture import groq_chain
 
 class TimestampsTests(unittest.TestCase):
+    def setUp(self):
+        self.enterContext(groq_chain())
+
+    def test_small_whisper_overshoot_is_clamped_and_large_errors_fail(self):
+        segments = [{'text': 'one', 'start': 0, 'end': 0.5}, {'text': 'two', 'start': 0.49, 'end': 1.006}]
+        with patch('backend.core.transcriber._wav_duration_ms', return_value=1000), \
+                patch('backend.core.transcriber._groq_segments', return_value=segments):
+            result = transcribe_segments(['a'])
+        self.assertEqual([(s['start_ms'], s['end_ms']) for s in result], [(0, 500), (500, 1000)])
+        for bad in ([{'text': 'x', 'start': 0, 'end': 4.5}], [{'text': 'x', 'start': 0, 'end': 3},
+                                                             {'text': 'y', 'start': 1, 'end': 2}],
+                    [{'text': 'x', 'start': 0.8, 'end': 0.2}]):
+            with self.subTest(bad=bad), patch('backend.core.transcriber._wav_duration_ms', return_value=3000), \
+                    patch('backend.core.transcriber._groq_segments', return_value=bad), self.assertRaises(ValueError):
+                transcribe_segments(['a'])
+
     def test_offsets_use_real_wav_duration_and_bad_timestamps_fail(self):
         with patch('backend.core.transcriber._wav_duration_ms', side_effect=[1200, 2300]), patch('backend.core.transcriber._groq_segments', side_effect=[[{'text':'one', 'start':0, 'end':1}], [{'text':'two', 'start':0.1, 'end':1.5}]]):
             result = transcribe_segments(['a', 'b'])
