@@ -37,7 +37,7 @@ export default function Chat({ chat, onAsk, source, economyOnly, presetQuestions
   };
 
   return (
-    <section style={{ padding: presetQuestions ? '14px var(--result-section-gutter) 34px' : '14px var(--result-section-gutter) 100px' }}>
+    <section className="results-chat" aria-label={presetQuestions ? 'Try a sample question' : 'Ask the meeting'}>
       <div
         style={{
           animation: 'fadeUp .9s cubic-bezier(.22,1,.36,1) .35s both',
@@ -45,7 +45,7 @@ export default function Chat({ chat, onAsk, source, economyOnly, presetQuestions
           margin: '0 auto',
           display: 'grid',
           gridTemplateColumns: 'var(--result-card-columns, minmax(140px,220px) 1fr)',
-          gap: 32,
+          gap: 'var(--result-card-gap, 32px)',
           border: '1.5px solid rgba(232,229,222,0.32)',
           background: 'rgba(232,229,222,0.025)',
           borderRadius: 18,
@@ -53,9 +53,9 @@ export default function Chat({ chat, onAsk, source, economyOnly, presetQuestions
           boxShadow: '8px 8px 0 rgba(232,229,222,0.10)',
         }}
       >
-        <span style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.08em', color: MUTE }}>
+        <h2 className="results-chat-heading">
           {presetQuestions ? 'Try a sample question' : 'Ask the meeting'}
-        </span>
+        </h2>
         <div style={{ maxWidth: 760 }}>
           {presetQuestions && (
             <div className="demo-sample-questions">
@@ -75,11 +75,11 @@ export default function Chat({ chat, onAsk, source, economyOnly, presetQuestions
           {!presetQuestions && chat.length === 0 && (
             <p
               style={{
-                margin: '0 0 34px',
+                margin: '0 0 var(--chat-intro-gap, 34px)',
                 fontFamily: SANS,
                 fontWeight: 500,
-                fontSize: 'clamp(22px,2.4vw,30px)',
-                color: MUTE,
+                fontSize: 'var(--chat-intro-size, clamp(22px,2.4vw,30px))',
+                color: SUBTLE,
                 letterSpacing: '-0.01em',
               }}
             >
@@ -87,16 +87,16 @@ export default function Chat({ chat, onAsk, source, economyOnly, presetQuestions
             </p>
           )}
 
-          <div aria-live={presetQuestions ? 'polite' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 38, marginBottom: presetQuestions ? 0 : 38 }}>
+          <div className="chat-thread" aria-live="polite" aria-relevant="additions text">
             {chat.map((msg) => (
               <div key={msg.id} style={{ animation: 'fadeUp .45s ease both' }}>
                 {!presetQuestions && (
                   <p
                     style={{
-                      margin: '0 0 16px',
+                      margin: '0 0 var(--chat-question-gap, 16px)',
                       fontFamily: SANS,
                       fontWeight: 500,
-                      fontSize: 'clamp(22px,2.4vw,30px)',
+                      fontSize: 'var(--chat-question-size, clamp(22px,2.4vw,30px))',
                       lineHeight: 1.3,
                       letterSpacing: '-0.01em',
                     }}
@@ -104,7 +104,7 @@ export default function Chat({ chat, onAsk, source, economyOnly, presetQuestions
                     {msg.q}
                   </p>
                 )}
-                <div style={{ borderLeft: '1px solid rgba(232,229,222,0.25)', paddingLeft: 24 }}>
+                <div style={{ borderLeft: '1px solid rgba(232,229,222,0.25)', paddingLeft: 'var(--chat-answer-gutter, 24px)' }}>
                   {msg.pending ? (
                     <span
                       style={{
@@ -162,8 +162,9 @@ export default function Chat({ chat, onAsk, source, economyOnly, presetQuestions
                 <option value="economy">Economy</option><option value="strong">Strong</option>
               </select>
             </label>}
-            <div className="chat-compose" style={{ borderTop: '1px solid rgba(232,229,222,0.10)', paddingTop: 28 }}>
+            <div className="chat-compose" style={{ borderTop: '1px solid rgba(232,229,222,0.10)', paddingTop: 'var(--chat-compose-gutter, 28px)' }}>
               <input
+                data-hov="1"
                 value={draft}
                 maxLength={1000}
                 disabled={sending}
@@ -172,7 +173,7 @@ export default function Chat({ chat, onAsk, source, economyOnly, presetQuestions
                   if (e.key === 'Enter') send();
                 }}
                 aria-label="Question about this meeting"
-                placeholder="What were the main decisions made?"
+                placeholder="Ask about this meeting"
                 style={{
                   flex: 1,
                   minWidth: 0,
@@ -181,13 +182,16 @@ export default function Chat({ chat, onAsk, source, economyOnly, presetQuestions
                   color: CREAM,
                   fontSize: 15,
                   fontFamily: SANS,
-                  padding: '18px 22px',
+                  padding: 'var(--chat-input-padding, 18px 22px)',
+                  minHeight: 44,
                   borderRadius: 14,
                   boxShadow: '4px 4px 0 rgba(232,229,222,0.08)',
                   transition: 'border-color .2s, background .2s',
                 }}
               />
               <button
+                data-hov="1"
+                data-mag="1"
                 onClick={send}
                 disabled={sending || !draft.trim()}
                 style={{

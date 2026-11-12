@@ -9,12 +9,15 @@ try {
   const page = await browser.newPage({ serviceWorkers: 'block' });
   let backendRequests = 0;
   await page.route('**/*', (route) => {
-    const requestOrigin = new URL(route.request().url()).origin;
-    if (requestOrigin === origin.origin) return route.continue();
-    if (requestOrigin === backend.origin) backendRequests += 1;
+    const url = new URL(route.request().url());
+    if (url.origin === backend.origin || (url.origin === origin.origin && url.pathname.startsWith('/api/'))) {
+      backendRequests += 1;
+      return route.abort();
+    }
+    if (url.origin === origin.origin) return route.continue();
     return route.abort();
   });
-  const response = await page.goto(origin.href);
+  const response = await page.goto(new URL('/sample', origin).href);
   assert.ok(response?.ok(), 'Sample page responded successfully');
   await page.getByRole('heading', { name: 'Onboarding pilot review' }).first().waitFor();
   await page.getByRole('button', { name: 'Who will send the invitations?' }).click();

@@ -8,14 +8,14 @@ const CARD = {
   margin: '0 auto',
   display: 'grid',
   gridTemplateColumns: 'var(--result-card-columns, minmax(140px,220px) 1fr)',
-  gap: 32,
+  gap: 'var(--result-card-gap, 32px)',
   border: '1.5px solid rgba(232,229,222,0.32)',
   background: 'rgba(232,229,222,0.025)',
   borderRadius: 18,
   padding: 'var(--result-card-padding, 44px 48px)',
   boxShadow: '8px 8px 0 rgba(232,229,222,0.10)',
 };
-const LABEL = { fontFamily: MONO, fontSize: 11, letterSpacing: '0.08em', color: MUTE };
+const LABEL = { fontFamily: MONO, fontSize: 11, letterSpacing: '0.08em', color: `var(--result-label-color, ${MUTE})` };
 
 const TODAY = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 
@@ -55,59 +55,19 @@ export default function Results({ result, meta, chat, onAsk, economyOnly, sample
     />
   );
 
-  return (
-    <article className={sampleMedia ? 'session-results sample-results' : 'session-results'}>
-      <section style={{ padding: sampleMedia ? '24px var(--result-section-gutter) 36px' : '9vh var(--result-section-gutter) 60px', maxWidth: 1160, margin: '0 auto', position: 'relative' }}>
-        <div style={{ ...LABEL, marginBottom: 30, animation: 'fadeIn .6s ease both' }}>{sampleMedia ? 'Prepared sample' : `Session — ${TODAY}`}</div>
-        <h1
-          style={{
-            margin: '0 0 34px',
-            fontFamily: SANS,
-            fontWeight: 500,
-            fontSize: 'clamp(44px,6.6vw,104px)',
-            lineHeight: 1.0,
-            letterSpacing: '-0.03em',
-            textWrap: 'balance',
-            maxWidth: '16ch',
-          }}
-        >
-          <span style={{ display: 'block', overflow: 'hidden', paddingBottom: '0.05em' }}>
-            <span style={{ display: 'block', animation: 'lineUp 1s cubic-bezier(.22,1,.36,1) .1s both' }}>
-              {stripMd(result.title) || 'Session record'}
-            </span>
-          </span>
-        </h1>
-        <div
-          style={{
-            display: 'flex',
-            gap: 22,
-            flexWrap: 'wrap',
-            ...LABEL,
-            animation: 'fadeIn .8s ease .5s both',
-          }}
-        >
-          {metaBits.map((b, i) => (
-            <span key={i} style={{ wordBreak: 'break-word' }}>
-              {b}
-            </span>
-          ))}
-        </div>
-        {sampleMedia}
-      </section>
-
-      {sampleMedia && questions}
-
-      {/* Summary */}
-      <section style={{ borderTop: '1px solid rgba(232,229,222,0.10)', padding: '56px var(--result-section-gutter, 44px) 14px' }}>
-        <div style={{ ...CARD, animation: 'fadeUp .9s cubic-bezier(.22,1,.36,1) .15s both' }}>
+  const notes = (
+    <div className="results-notes">
+      <section className="results-summary">
+        <div className="results-card" style={{ ...CARD, animation: 'fadeUp .9s cubic-bezier(.22,1,.36,1) .15s both' }}>
           <span style={LABEL}>Summary</span>
           <div style={{ maxWidth: 760 }}>
             {toLines(result.summary).map((p, i) => (
               <p
+                className="results-summary-paragraph"
                 key={i}
                 style={{
-                  margin: i === 0 ? '0 0 20px' : '0 0 16px',
-                  fontSize: i === 0 ? 'clamp(19px,1.9vw,24px)' : 15,
+                  margin: `0 0 var(--result-paragraph-gap, ${i === 0 ? '20px' : '16px'})`,
+                  fontSize: `var(--result-note-font, ${i === 0 ? 'clamp(19px,1.9vw,24px)' : '15px'})`,
                   lineHeight: i === 0 ? 1.5 : 1.75,
                   color: i === 0 ? CREAM : SUBTLE,
                   letterSpacing: i === 0 ? '-0.005em' : 0,
@@ -120,12 +80,11 @@ export default function Results({ result, meta, chat, onAsk, economyOnly, sample
         </div>
       </section>
 
-      {/* Findings */}
       {groups.map((g, gi) => (
-        <section key={g.label} style={{ padding: '14px var(--result-section-gutter, 44px)' }}>
-          <div style={{ ...CARD, animation: 'fadeUp .9s cubic-bezier(.22,1,.36,1) .25s both' }}>
+        <section className="results-finding" key={g.label}>
+          <div className="results-card" style={{ ...CARD, animation: 'fadeUp .9s cubic-bezier(.22,1,.36,1) .25s both' }}>
             <div>
-              <div
+              {sampleMedia && <div
                 style={{
                   fontFamily: SANS,
                   fontWeight: 300,
@@ -137,27 +96,30 @@ export default function Results({ result, meta, chat, onAsk, economyOnly, sample
                 }}
               >
                 0{gi + 1}
-              </div>
+              </div>}
               <span style={LABEL}>{g.label}</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', maxWidth: 760 }}>
               {g.items.map((text, i) => (
                 <div
                   key={i}
+                  className="results-finding-item"
+                  data-hov="1"
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '36px 1fr',
+                    gridTemplateColumns: 'var(--result-finding-columns, 36px 1fr)',
                     alignItems: 'baseline',
-                    padding: '20px 0',
-                    borderBottom: '1px solid rgba(232,229,222,0.07)',
+                    padding: 'var(--result-item-padding, var(--result-finding-padding, 20px 0))',
+                    borderBottom: 'var(--result-item-divider, 1px solid rgba(232,229,222,0.07))',
                     transition: 'transform .3s cubic-bezier(.22,1,.36,1)',
                   }}
                 >
-                  <span style={{ fontFamily: MONO, fontSize: 10, color: DIM }}>0{i + 1}</span>
+                  {sampleMedia && <span style={{ fontFamily: MONO, fontSize: 10, color: DIM }}>0{i + 1}</span>}
                   <span
+                    className="results-finding-text"
                     style={{
                       fontFamily: SANS,
-                      fontSize: 'clamp(17px,1.9vw,24px)',
+                      fontSize: 'var(--result-note-font, clamp(17px,1.9vw,24px))',
                       lineHeight: 1.4,
                       letterSpacing: '-0.005em',
                       color: '#dedbd3',
@@ -171,13 +133,41 @@ export default function Results({ result, meta, chat, onAsk, economyOnly, sample
           </div>
         </section>
       ))}
+    </div>
+  );
+
+  return (
+    <article className={`session-results ${sampleMedia ? 'sample-results' : 'live-results'}`}>
+      <header className="results-header">
+        <div className="results-session-date" style={LABEL}>{sampleMedia ? 'Prepared sample' : `Session — ${TODAY}`}</div>
+        <h1 className="results-title">
+          <span style={{ display: 'block', overflow: 'hidden', paddingBottom: '0.05em' }}>
+            <span style={{ display: 'block', animation: 'lineUp 1s cubic-bezier(.22,1,.36,1) .1s both' }}>
+              {stripMd(result.title) || 'Session record'}
+            </span>
+          </span>
+        </h1>
+        <div className="results-meta" style={LABEL}>
+          {metaBits.map((b, i) => (
+            <span key={i} style={{ wordBreak: 'break-word' }}>
+              {b}
+            </span>
+          ))}
+        </div>
+        {sampleMedia}
+      </header>
+      <div className={sampleMedia ? undefined : 'live-results-workspace'}>
+        {questions}
+        {notes}
+      </div>
 
       {/* Transcript */}
-      <section style={{ padding: '14px var(--result-section-gutter, 44px)' }}>
-        <div style={{ ...CARD, animation: 'fadeUp .9s cubic-bezier(.22,1,.36,1) .3s both' }}>
+      <section className="results-transcript">
+        <div className="results-card" style={{ ...CARD, animation: 'fadeUp .9s cubic-bezier(.22,1,.36,1) .3s both' }}>
           <span style={LABEL}>Transcript</span>
           <div style={{ maxWidth: 760 }}>
             <button
+              data-hov="1"
               aria-expanded={transcriptOpen}
               onClick={() => setTranscriptOpen((o) => !o)}
               style={{
@@ -213,8 +203,6 @@ export default function Results({ result, meta, chat, onAsk, economyOnly, sample
           </div>
         </div>
       </section>
-
-      {!sampleMedia && questions}
     </article>
   );
 }

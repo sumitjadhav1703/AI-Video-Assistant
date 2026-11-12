@@ -32,12 +32,16 @@ try {
   });
 
   await page.goto(app);
-  await page.getByRole('button', { name: 'Analyze your own clip' }).click();
   await page.getByLabel('Audio or video file').setInputFiles(process.env.AVA_BROWSER_MEDIA);
-  await page.getByRole('checkbox').check();
+  assert.equal(await page.getByRole('checkbox').count(), 0);
+  assert.equal(requestCounts['POST /jobs'], undefined, 'Selecting media does not submit it');
+  const submission = page.waitForRequest(request => request.method() === 'POST' &&
+    new URL(request.url()).pathname === '/jobs');
   const startedAt = Date.now();
-  await page.getByRole('button', { name: 'Analyze clip' }).click();
-  await page.getByRole('button', { name: 'Delete session' }).waitFor();
+  await page.getByRole('button', { name: /Analyse/ }).click();
+  assert.match((await submission).postData(), /name="demo_acknowledged"\r\n\r\ntrue/);
+  const reset = page.getByRole('button', { name: 'New session' });
+  await reset.waitFor();
   await page.getByText('Synthetic Release Review', { exact: true }).first().waitFor();
   const resultMs = Date.now() - startedAt;
   await page.getByText('The operations team owns the Friday release.', { exact: false }).first().waitFor();
@@ -48,8 +52,9 @@ try {
   const chatMs = Date.now() - chatStartedAt;
   await page.getByText(/0:00–0:01.*The operations team will ship the demo on Friday/).waitFor();
   assert.ok(injectedFailure && polls >= 2, 'polling recovered after a transport failure');
+  await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
   const deleted = page.waitForResponse(response => response.request().method() === 'DELETE');
-  await page.getByRole('button', { name: 'Delete session' }).click();
+  await reset.click();
   assert.equal((await deleted).status(), 200);
   await page.getByText('Live session deleted.', { exact: true }).waitFor();
   console.log(JSON.stringify({ resultMs, chatMs, polls, injectedFailure, requestCounts }));

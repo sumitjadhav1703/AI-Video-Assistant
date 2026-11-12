@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import DemoSample from './components/DemoSample';
+import Nav from './components/Nav';
+import Overlays from './components/Overlays';
+import Preloader from './components/Preloader';
 import Empty from './components/Empty';
 import Processing from './components/Processing';
 import Results from './components/Results';
-import { STEP_ORDER } from './lib/theme';
+import { DIM, MONO, SANS, STEP_ORDER } from './lib/theme';
 import { startJob, getDemoMode, getStatus, getResult, askChat, releaseJob } from './api';
 
 const SESSION_KEY = 'minutes.live-session';
@@ -37,7 +39,8 @@ const EXPIRED_NOTICE = 'This live session has expired or is no longer available.
 
 export default function App() {
   const [session, setSession] = useState(savedSession);
-  const [view, setView] = useState(() => session && window.history.state?.resumeLiveDemo ? 'session' : 'sample');
+  const [booting, setBooting] = useState(true);
+  const finishIntro = useCallback(() => setBooting(false), []);
   const [mode, setMode] = useState('loading');
   const [modeAttempt, setModeAttempt] = useState(0);
   const [meta, setMeta] = useState({ language: 'english' });
@@ -56,19 +59,6 @@ export default function App() {
   const pollTiming = useRef({ start: 0, retryAt: 0 });
   const checkStatus = useRef(null);
 
-  useEffect(() => {
-    window.history.replaceState({
-      ...window.history.state,
-      resumeLiveDemo: view === 'session' && Boolean(session),
-    }, '');
-  }, [view, session]);
-
-  const openView = (nextView) => {
-    if (nextView === 'live' && view !== 'live' && !session) setMode('loading');
-    setView(nextView);
-    window.scrollTo({ top: 0, behavior: 'instant' });
-  };
-
   const clearSession = useCallback((message) => {
     saveSession(null);
     setSession(null);
@@ -80,11 +70,11 @@ export default function App() {
     setPollNotice('');
     pollTiming.current = { start: 0, retryAt: 0 };
     setNotice(message);
-    setView((current) => current === 'session' ? 'live' : current);
+    window.scrollTo({ top: 0, behavior: 'instant' });
   }, []);
 
   useEffect(() => {
-    if (view !== 'live' || session) return;
+    if (session) return;
     const controller = new AbortController();
     setMode('loading');
     getDemoMode(controller.signal).then(({ mode: availableMode }) => {
@@ -94,10 +84,10 @@ export default function App() {
       if (!controller.signal.aborted) setMode('unavailable');
     });
     return () => controller.abort();
-  }, [view, session, modeAttempt]);
+  }, [session, modeAttempt]);
 
   useEffect(() => {
-    if (view !== 'session' || !session || phase !== 'processing' || deleting) return;
+    if (!session || phase !== 'processing' || deleting) return;
     const timing = pollTiming.current;
     timing.start ||= Date.now();
     const deadline = timing.start + POLL_WINDOW;
@@ -204,7 +194,7 @@ export default function App() {
       controller?.abort();
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [view, session, phase, deleting, clearSession]);
+  }, [session, phase, deleting, clearSession]);
 
   const analyse = async ({ file, inviteCode }) => {
     if (writes.current.upload || session || !['invited', 'public'].includes(mode)) return;
@@ -222,7 +212,7 @@ export default function App() {
       setMeta({ fileName: file.name, fileSize: file.size, language: 'english' });
       setSession(created);
       setPhase('processing');
-      setView((current) => current === 'live' ? 'session' : current);
+      window.scrollTo({ top: 0, behavior: 'instant' });
     } catch (error) {
       setUploadError(error.message);
     } finally {
@@ -269,77 +259,79 @@ export default function App() {
     }
   };
 
+  const navStatus = !session ? 'No active session'
+    : phase === 'processing' ? 'Processing…' : phase === 'ready' ? 'Session active' : 'Analysis stopped';
+
   return (
-    <>
-      <header className="demo-header">
-        <span className="demo-brand">Minutes</span>
-        <nav aria-label="Demo paths" className="demo-paths">
-          <button type="button" className="demo-button" aria-pressed={view === 'sample'}
-            onClick={() => openView('sample')}>Explore a sample</button>
-          <button type="button" className="demo-button" aria-pressed={view === 'live' || view === 'session'}
-            onClick={() => view !== 'session' && openView('live')}>Analyze your own clip</button>
-        </nav>
-      </header>
-      <main>
-        {view === 'home' && (
-          <section className="demo-panel">
-            <h1>Video and meeting analysis</h1>
-            <p>Read a summary and ask questions with timestamp citations.</p>
-          </section>
+    <div className="minutes-app">
+      <Overlays />
+      {booting && <Preloader onDone={finishIntro} />}
+      <Nav status={navStatus} dotActive={Boolean(session) && phase === 'ready'}
+        dotPulse={Boolean(session) && phase === 'processing'} showReset={!booting && Boolean(session)}
+        resetDisabled={deleting || chat.some((message) => message.pending)} onReset={remove} />
+
+      <main className="minutes-main">
+        {!booting && !session && (
+          <Empty mode={mode} submitting={submitting} onAnalyse={analyse} uploadError={uploadError}
+            notice={notice} onRetryAvailability={() => setModeAttempt((attempt) => attempt + 1)} />
         )}
-        {(view === 'home' || view === 'sample' || view === 'live') && session && (
-          <div className="demo-panel demo-resume">
-            <button className="demo-button" onClick={() => openView('session')}>Resume live session</button>
-          </div>
-        )}
-        {view === 'sample' && <DemoSample onBack={() => openView('home')} />}
-        {notice && <p className="demo-panel demo-feedback" role="status">{notice}</p>}
-        {view === 'live' && !session && (
+        {!booting && session && (
           <>
-            {mode === 'loading' && <p className="demo-panel" role="status">Checking live availability. The backend may be waking up.</p>}
-            {mode === 'sample' && (
-              <section className="demo-panel">
-                <h1>Live analysis is paused</h1>
-                <p>Explore the prepared sample for a summary, transcript, and timestamped answers.</p>
-                <button className="demo-button" onClick={() => openView('sample')}>Open sample</button>
-              </section>
-            )}
-            {mode === 'unavailable' && (
-              <section className="demo-panel">
-                <h1>Live analysis is unavailable</h1>
-                <p role="status">Could not check live availability. The sample is ready to explore.</p>
-                <button className="demo-button" onClick={() => setModeAttempt((attempt) => attempt + 1)}>Check availability</button>
-              </section>
-            )}
-            {(mode === 'invited' || mode === 'public') &&
-              <Empty mode={mode} submitting={submitting} onAnalyse={analyse} />}
-            {uploadError && <p className="demo-panel demo-feedback" role="alert">{uploadError}</p>}
-          </>
-        )}
-        {view === 'session' && session && (
-          <>
-            <section className="demo-panel demo-session" aria-label="Live session controls">
-              <div className="demo-paths">
+            {(deleteError || pollNotice || phase === 'processing') && (
+              <section className="minutes-session-feedback" aria-label="Live session status">
+                {deleteError && <p role="alert">{deleteError}</p>}
+                {pollNotice && <p role="status">{pollNotice}</p>}
                 {phase === 'processing' && (
-                  <button className="demo-button" disabled={checking || deleting} onClick={() => checkStatus.current?.()}>
+                  <button className="minutes-session-button" disabled={checking || deleting}
+                    onClick={() => checkStatus.current?.()}>
                     {checking ? 'Checking status…' : 'Check status'}
                   </button>
                 )}
-                <button className="demo-button" disabled={deleting || chat.some((message) => message.pending)} onClick={remove}>
-                  {deleting ? 'Deleting session…' : 'Delete session'}
-                </button>
-              </div>
-              {deleteError && <p role="alert">{deleteError}</p>}
-              {pollNotice && <p role="status">{pollNotice}</p>}
-            </section>
-            {phase === 'processing' && <Processing fileName={meta.fileName || 'Live clip'} stageIdx={stageIdx} />}
-            {phase === 'ready' && result && (
-              <Results result={result} meta={meta} chat={chat} onAsk={ask} mode="live" economyOnly />
+              </section>
             )}
-            {phase === 'error' && <h1 className="demo-panel">Analysis stopped</h1>}
+            {phase === 'processing' && <Processing fileName={meta.fileName || 'Live clip'} stageIdx={stageIdx} />}
+            {phase === 'ready' && result && <Results result={result} meta={meta} chat={chat} onAsk={ask} economyOnly />}
+            {phase === 'error' && <h1 className="minutes-session-feedback">Analysis stopped</h1>}
           </>
         )}
       </main>
-    </>
+
+      <footer style={{ borderTop: '1px solid rgba(232,229,222,0.10)', position: 'relative', zIndex: 4 }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            padding: '22px var(--minutes-page-gutter, 44px)',
+            fontFamily: MONO,
+            fontSize: 10,
+            letterSpacing: '0.2em',
+            color: DIM,
+            flexWrap: 'wrap',
+            gap: 12,
+          }}
+        >
+          <span>© 2026 Minutes</span>
+          <span>Upload · transcribe · ask</span>
+          <span>Every word, remembered</span>
+        </div>
+        <div style={{ overflow: 'hidden', padding: '0 var(--minutes-page-gutter, 32px)' }}>
+          <div
+            style={{
+              fontFamily: SANS,
+              fontWeight: 300,
+              fontSize: 'var(--minutes-footer-size, clamp(100px,17vw,280px))',
+              lineHeight: 0.72,
+              letterSpacing: '-0.04em',
+              color: 'rgba(232,229,222,0.92)',
+              transform: 'translateY(14%)',
+              whiteSpace: 'nowrap',
+              textAlign: 'center',
+            }}
+          >
+            Minutes
+          </div>
+        </div>
+      </footer>
+    </div>
   );
 }
