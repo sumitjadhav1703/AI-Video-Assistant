@@ -183,6 +183,8 @@ def _transient(error: Exception) -> bool:
     return isinstance(error, (ConnectionError, TimeoutError)) or name in ('apiconnectionerror', 'apitimeouterror', 'timeoutexception', 'connecttimeout', 'readtimeout')
 
 
+TRANSIENT_COOLDOWN_SECONDS = 30
+
 def private_litellm():
     os.environ['LITELLM_LOCAL_MODEL_COST_MAP'] = 'True'
     os.environ['LITELLM_TELEMETRY'] = 'False'
@@ -356,16 +358,14 @@ class GuardedChat(Runnable):
         for route in self.routes:
             if not _eligible(route, operation):
                 continue
-            identity = (route.provider, route.model)
-            if identity not in operation['failed']:
+            # failed maps a route to None (broken for the job) or the monotonic time it may be retried.
+            retry_at = operation['failed'].get((route.provider, route.model), 0)
+            if retry_at is None:
+                mixed_failure = True
+            elif retry_at == 0 or retry_at <= time.monotonic():
                 eligible.append(route)
             else:
-                retry_at = operation['failed'][identity]
-                remaining_cooldown = retry_at - time.monotonic() if retry_at is not None else 0
-                if remaining_cooldown <= 0:
-                    mixed_failure = True
-                else:
-                    retry_delays.append(math.ceil(remaining_cooldown))
+                retry_delays.append(math.ceil(retry_at - time.monotonic()))
         for index, route in enumerate(eligible):
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -411,7 +411,8 @@ class GuardedChat(Runnable):
                         operation['failed'][identity] = time.monotonic() + delay
                         retry_delays.append(delay)
                     else:
-                        operation['failed'][identity] = None
+                        # One timeout or 5xx should not disable the route for every later stage of the job.
+                        operation['failed'][identity] = time.monotonic() + TRANSIENT_COOLDOWN_SECONDS
                         mixed_failure = True
                     continue
                 # Auth, bad request, model removed: this route is broken for the job, so skip it from now on

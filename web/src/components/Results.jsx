@@ -17,10 +17,9 @@ const CARD = {
 };
 const LABEL = { fontFamily: MONO, fontSize: 11, letterSpacing: '0.08em', color: `var(--result-label-color, ${MUTE})` };
 
-const TODAY = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-
-export default function Results({ result, meta, chat, onAsk, economyOnly, sampleMedia, presetQuestions, onSeek }) {
+export default function Results({ result, meta, chat, onAsk, sampleMedia, presetQuestions, onSeek }) {
   const [transcriptOpen, setTranscriptOpen] = useState(false);
+  const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const transcript = transcriptOpen ? toParagraphs(result.transcript) : [];
 
   // The backend emits a "No … found." placeholder string when the LLM extracts
@@ -48,8 +47,6 @@ export default function Results({ result, meta, chat, onAsk, economyOnly, sample
     <Chat
       chat={chat}
       onAsk={onAsk}
-      source={meta.fileName}
-      economyOnly={economyOnly}
       presetQuestions={presetQuestions}
       onSeek={onSeek}
     />
@@ -139,7 +136,7 @@ export default function Results({ result, meta, chat, onAsk, economyOnly, sample
   return (
     <article className={`session-results ${sampleMedia ? 'sample-results' : 'live-results'}`}>
       <header className="results-header">
-        <div className="results-session-date" style={LABEL}>{sampleMedia ? 'Prepared sample' : `Session — ${TODAY}`}</div>
+        <div className="results-session-date" style={LABEL}>{sampleMedia ? 'Prepared sample' : `Session — ${today}`}</div>
         <h1 className="results-title">
           <span style={{ display: 'block', overflow: 'hidden', paddingBottom: '0.05em' }}>
             <span style={{ display: 'block', animation: 'lineUp 1s cubic-bezier(.22,1,.36,1) .1s both' }}>

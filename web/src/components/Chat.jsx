@@ -6,30 +6,22 @@ function formatTime(ms) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
-function sourceLink(source, start) {
-  if (start == null) return null;
-  try {
-    const url = new URL(source);
-    if (url.protocol !== 'https:' || !['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'].includes(url.hostname)) return null;
-    url.searchParams.set('t', String(Math.floor(start / 1000)));
-    return url.href;
-  } catch { return null; }
-}
-
-export default function Chat({ chat, onAsk, source, economyOnly, presetQuestions, onSeek }) {
-  const [tier, setTier] = useState('economy');
+export default function Chat({ chat, onAsk, presetQuestions, onSeek }) {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false);
 
+  // The backend rejects questions over 2048 UTF-8 bytes; maxLength counts UTF-16 units.
+  const tooLong = new TextEncoder().encode(draft.trim()).length > 2048;
+
   const send = async () => {
     const q = draft.trim();
-    if (!q || sendingRef.current) return;
+    if (!q || tooLong || sendingRef.current) return;
     sendingRef.current = true;
     setSending(true);
     setDraft('');
     try {
-      await onAsk(q, economyOnly ? 'economy' : tier);
+      await onAsk(q);
     } finally {
       sendingRef.current = false;
       setSending(false);
@@ -98,14 +90,14 @@ export default function Chat({ chat, onAsk, source, economyOnly, presetQuestions
                     <p className="chat-q-text">{msg.q}</p>
                   </div>
                 )}
-                <div className={`chat-a${abstained ? ' chat-a-abstained' : ''}`}>
+                <div className={`chat-a${abstained ? ' chat-a-abstained' : ''}${msg.error ? ' chat-a-error' : ''}`}>
                   {msg.pending ? (
                     <span style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.05em', color: MUTE, animation: 'pulseDot 1.2s ease infinite' }}>
                       Reading the transcript…
                     </span>
                   ) : (
                     <>
-                      <p className="chat-a-text">{msg.a}</p>
+                      <p className="chat-a-text" role={msg.error ? 'alert' : undefined}>{msg.a}</p>
                       {abstained && <p className="chat-a-hint">Try rephrasing or ask about something mentioned in the recording.</p>}
                     </>
                   )}
@@ -117,12 +109,9 @@ export default function Chat({ chat, onAsk, source, economyOnly, presetQuestions
                         const range = timed
                           ? `${citation.timing_precision === 'piece' ? '~' : ''}${formatTime(citation.start_ms)}${citation.end_ms == null ? '' : `–${formatTime(citation.end_ms)}`}`
                           : null;
-                        const href = timed ? sourceLink(source, citation.start_ms) : null;
                         let chip = range && <span className="chat-chip">{range}</span>;
                         if (timed && onSeek) {
                           chip = <button type="button" className="chat-chip" aria-label={`Jump to ${range}`} onClick={() => onSeek(citation.start_ms)}>{range}</button>;
-                        } else if (href) {
-                          chip = <a className="chat-chip" href={href} target="_blank" rel="noreferrer" aria-label={`Open source at ${range}`}>{range}</a>;
                         }
                         return (
                           <div key={`${citation.chunk_id}-${index}`} className="chat-cite">
@@ -140,11 +129,6 @@ export default function Chat({ chat, onAsk, source, economyOnly, presetQuestions
           </div>
 
           {!presetQuestions && <>
-            {!economyOnly && <label style={{ display: 'block', color: SUBTLE, marginBottom: 12 }}>Model tier{' '}
-              <select value={tier} onChange={(e) => setTier(e.target.value)} disabled={sending} style={{ background: '#0e0e0d', color: CREAM, padding: 8 }}>
-                <option value="economy">Economy</option><option value="strong">Strong</option>
-              </select>
-            </label>}
             <div className="chat-compose" style={{ borderTop: '1px solid rgba(232,229,222,0.10)', paddingTop: 'var(--chat-compose-gutter, 28px)' }}>
               <input
                 data-hov="1"
@@ -153,7 +137,8 @@ export default function Chat({ chat, onAsk, source, economyOnly, presetQuestions
                 disabled={sending}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') send();
+                  // Enter while an IME is composing confirms the candidate, not the question.
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229) send();
                 }}
                 aria-label="Question about this meeting"
                 placeholder="Ask about this meeting"
@@ -176,7 +161,7 @@ export default function Chat({ chat, onAsk, source, economyOnly, presetQuestions
                 data-hov="1"
                 data-mag="1"
                 onClick={send}
-                disabled={sending || !draft.trim()}
+                disabled={sending || !draft.trim() || tooLong}
                 style={{
                   background: CREAM,
                   color: '#0e0e0d',
@@ -193,6 +178,7 @@ export default function Chat({ chat, onAsk, source, economyOnly, presetQuestions
                 Ask
               </button>
             </div>
+            {tooLong && <p role="status" className="chat-a-hint">This question is too long. Shorten it to ask.</p>}
           </>}
         </div>
       </div>

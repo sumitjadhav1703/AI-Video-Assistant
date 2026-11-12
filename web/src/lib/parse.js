@@ -1,13 +1,16 @@
 // The backend returns markdown. This UI renders plain text, so strip the common
 // inline markers (bold **/__, inline code, ATX headings) that would otherwise
-// show literally. A leading bullet/number marker is only treated as a marker
-// when followed by whitespace, so "**Owner:**" is never mistaken for a bullet.
+// show literally. Only paired markers around text are removed, so identifiers
+// such as __init__ or a lone backtick survive. A leading bullet/number marker is
+// only treated as a marker when followed by whitespace, so "**Owner:**" is never
+// mistaken for a bullet.
 export function stripMd(str) {
   if (!str) return '';
   return str
-    .replace(/`+/g, '')
-    .replace(/\*\*/g, '')
-    .replace(/__/g, '')
+    .replace(/(`+)([^\n]+?)\1(?!`)/g, '$2')
+    .replace(/\*\*(?=\S)([^\n]*?\S)\*\*/g, '$1')
+    // __word__ is far more often a Python dunder than bold, so keep bare identifiers.
+    .replace(/(^|\W)__(?=\S)([^\n]*?\S)__(?!\w)/g, (match, before, text) => (/^\w+$/.test(text) ? match : before + text))
     .replace(/^#{1,6}\s+/gm, '')
     .trim();
 }

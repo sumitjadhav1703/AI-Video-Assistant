@@ -40,7 +40,8 @@ try {
   const startedAt = Date.now();
   await page.getByRole('button', { name: /Analyse/ }).click();
   assert.match((await submission).postData(), /name="demo_acknowledged"\r\n\r\ntrue/);
-  const reset = page.getByRole('button', { name: 'New session' });
+  const reset = page.getByRole('button', { name: 'Delete session' });
+  page.on('dialog', dialog => dialog.accept());
   await reset.waitFor();
   await page.getByText('Synthetic Release Review', { exact: true }).first().waitFor();
   const resultMs = Date.now() - startedAt;

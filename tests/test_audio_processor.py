@@ -2,6 +2,8 @@ import os
 import subprocess
 import tempfile
 import unittest
+
+import yt_dlp
 import wave
 from pathlib import Path
 from unittest.mock import patch
@@ -52,7 +54,7 @@ class AudioSafetyTests(unittest.TestCase):
     def test_blank_download_size_uses_default(self):
         with tempfile.TemporaryDirectory() as root, patch.object(audio.tempfile, 'tempdir', root), \
                 patch.dict(os.environ, {'ENABLE_YOUTUBE': 'true', 'MAX_DOWNLOAD_MB': ''}), \
-                patch.object(audio.yt_dlp, 'YoutubeDL') as client:
+                patch('yt_dlp.YoutubeDL') as client:
             client.return_value.__enter__.return_value.extract_info.return_value = {'duration': 601}
             with self.assertRaises(ValueError):
                 audio.download_youtube_audio('https://youtu.be/abcdefghijk')
@@ -90,7 +92,7 @@ class AudioSafetyTests(unittest.TestCase):
     def test_youtube_disabled_and_invalid_urls_never_download(self):
         urls = ['https://youtube.com/watch?v=abcdefghijk', 'http://youtube.com/watch?v=abcdefghijk', 'https://youtube.com:443/watch?v=abcdefghijk', 'https://youtube.com@localhost/watch?v=abcdefghijk', 'https://evil.example/video']
         for url in urls:
-            with self.subTest(url=url), patch.dict(os.environ, {'ENABLE_YOUTUBE': 'false'}), patch.object(audio.yt_dlp, 'YoutubeDL') as client:
+            with self.subTest(url=url), patch.dict(os.environ, {'ENABLE_YOUTUBE': 'false'}), patch('yt_dlp.YoutubeDL') as client:
                 with self.assertRaises(ValueError):
                     audio.process_input(url)
                 client.assert_not_called()
@@ -107,7 +109,7 @@ class AudioSafetyTests(unittest.TestCase):
                     audio.validate_youtube_url(url)
 
     def test_youtube_rejects_redirects_and_uses_single_video_extractor(self):
-        with patch.dict(os.environ, {'ENABLE_YOUTUBE': 'true'}), patch.object(audio.yt_dlp, 'YoutubeDL') as client:
+        with patch.dict(os.environ, {'ENABLE_YOUTUBE': 'true'}), patch('yt_dlp.YoutubeDL') as client:
             with self.assertRaisesRegex(ValueError, 'single YouTube video'):
                 audio.download_youtube_audio('https://www.youtube.com/redirect?q=https%3A%2F%2Fexample.invalid')
             client.assert_not_called()
@@ -120,7 +122,7 @@ class AudioSafetyTests(unittest.TestCase):
 
     def test_download_failure_removes_private_directory(self):
         with tempfile.TemporaryDirectory() as root, patch.object(audio.tempfile, 'tempdir', root), \
-                patch.dict(os.environ, {'ENABLE_YOUTUBE': 'true'}), patch.object(audio.yt_dlp, 'YoutubeDL') as client:
+                patch.dict(os.environ, {'ENABLE_YOUTUBE': 'true'}), patch('yt_dlp.YoutubeDL') as client:
             client.return_value.__enter__.return_value.extract_info.side_effect = RuntimeError('failed')
             with self.assertRaises(RuntimeError):
                 audio.download_youtube_audio('https://youtube.com/watch?v=abcdefghijk')
@@ -129,9 +131,9 @@ class AudioSafetyTests(unittest.TestCase):
     def test_youtube_challenge_offers_upload_without_using_cookies(self):
         with tempfile.TemporaryDirectory() as root, patch.object(audio.tempfile, 'tempdir', root), \
                 patch.dict(os.environ, {'ENABLE_YOUTUBE': 'true', 'YT_DLP_COOKIES_PATH': root}), \
-                patch.object(audio.yt_dlp, 'YoutubeDL') as client:
+                patch('yt_dlp.YoutubeDL') as client:
             downloader = client.return_value.__enter__.return_value
-            downloader.extract_info.side_effect = audio.yt_dlp.utils.DownloadError("Sign in to confirm you're not a bot")
+            downloader.extract_info.side_effect = yt_dlp.utils.DownloadError("Sign in to confirm you're not a bot")
             with self.assertRaisesRegex(audio.MediaValidationError, 'Upload an audio or video file'):
                 audio.download_youtube_audio('https://youtu.be/abcdefghijk')
             self.assertNotIn('cookiefile', client.call_args.args[0])
@@ -141,7 +143,7 @@ class AudioSafetyTests(unittest.TestCase):
         for info in ({'duration': 601}, {'duration': 4, 'is_live': True}, {'duration': None}, {'_type': 'playlist'}):
             with self.subTest(info=info), tempfile.TemporaryDirectory() as root, \
                     patch.object(audio.tempfile, 'tempdir', root), patch.dict(os.environ, {'ENABLE_YOUTUBE': 'true'}), \
-                    patch.object(audio.yt_dlp, 'YoutubeDL') as client:
+                    patch('yt_dlp.YoutubeDL') as client:
                 downloader = client.return_value.__enter__.return_value
                 downloader.extract_info.return_value = info
                 with self.assertRaises(ValueError):
@@ -152,7 +154,7 @@ class AudioSafetyTests(unittest.TestCase):
     def test_download_size_hook_cleans_partial_file(self):
         with tempfile.TemporaryDirectory() as root, patch.object(audio.tempfile, 'tempdir', root), \
                 patch.dict(os.environ, {'ENABLE_YOUTUBE': 'true', 'MAX_DOWNLOAD_MB': '1'}), \
-                patch.object(audio.yt_dlp, 'YoutubeDL') as client:
+                patch('yt_dlp.YoutubeDL') as client:
             downloader = client.return_value.__enter__.return_value
             downloader.extract_info.return_value = {'duration': 5}
             def download(info, download):

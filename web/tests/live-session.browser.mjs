@@ -122,12 +122,14 @@ try {
   await page.getByText(result.transcript).waitFor();
   await questionBox.fill(question);
   await ask.click();
-  await page.getByText(answer, { exact: true }).waitFor();
+  // The mocked citation quotes the answer verbatim, so two elements match.
+  await page.getByText(answer, { exact: true }).first().waitFor();
   await page.getByText(/0:07.*0:09.*The pilot launches on Monday/).waitFor();
 
   await page.reload();
   await heading.waitFor();
-  const reset = page.getByRole('button', { name: 'New session' });
+  page.on('dialog', (dialog) => dialog.accept());
+  const reset = page.getByRole('button', { name: 'Delete session' });
   await reset.click();
   await page.getByRole('alert').filter({ hasText: 'Session is busy.' }).waitFor();
   assert.ok(await heading.isVisible(), 'Failed deletion retains the active session');

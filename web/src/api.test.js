@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { askChat, getDemoMode, getStatus, getResult, releaseJob, startJob } from './api.js';
+import { askChat, getDemoMode, getStatus, getResult, releaseJob, startJob, UPLOAD_TIMEOUT_HINT } from './api.js';
 
 const job = { id: 'job', token: 'capability-secret' };
 
@@ -84,7 +84,7 @@ test('every job operation uses bearer auth and chat sends economy', async () => 
   };
   await getStatus(job);
   await getResult(job);
-  await askChat(job, 'question', 'strong');
+  await askChat(job, 'question');
   await releaseJob(job);
   assert.deepEqual(requests.map(({ method, url }) => [method, new URL(url, 'http://localhost').pathname]), [
     ['GET', '/api/jobs/job'], ['GET', '/api/jobs/job/result'], ['POST', '/api/jobs/job/chat'], ['DELETE', '/api/jobs/job'],
@@ -118,4 +118,23 @@ test('credentialed API requests reject redirects instead of forwarding headers',
   const file = Object.assign(new Blob(['clip']), { name: 'clip.wav' });
   await startJob({ file, inviteCode: 'invitation' });
   assert.equal(requests[0].redirect, 'error');
+});
+
+test('503 exposes Retry-After like 429', async () => {
+  globalThis.fetch = async () => new Response(JSON.stringify({ detail: 'Busy.' }), {
+    status: 503, headers: { 'Retry-After': '7' },
+  });
+  await assert.rejects(getStatus(job), (error) =>
+    error.status === 503 && error.retryAfterMs === 7000 && /Busy.*7 seconds/.test(error.message));
+});
+
+test('an empty 204 response is a success', async () => {
+  globalThis.fetch = async () => new Response(null, { status: 204 });
+  assert.deepEqual(await releaseJob(job), {});
+});
+
+test('a timed-out upload warns that the job may still exist', async () => {
+  globalThis.fetch = async () => { throw new DOMException('aborted', 'AbortError'); };
+  const file = Object.assign(new Blob(['clip']), { name: 'clip.wav' });
+  await assert.rejects(startJob({ file }), (error) => error.message === UPLOAD_TIMEOUT_HINT);
 });

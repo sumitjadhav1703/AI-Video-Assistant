@@ -1,5 +1,34 @@
 # Deployment readiness
 
+## Audit 2 — 13 November 2026
+
+Nothing was deployed and no environment variable was changed.
+
+**Render:**
+- The image builds.
+- The suite passes inside the image, and the image now passes the 512 MiB / 0.1 CPU gate locally on arm64 (the original image fails it).
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1` were added.
+- `ENABLE_API_DOCS` is a new optional variable and stays off by default.
+- **Database changes on first start of the new image** (`init_db`): two additive, non-destructive `CREATE INDEX IF NOT EXISTS` statements, `jobs_status_updated` and `provider_attempts_job`. They take a brief write lock on small tables. Treat this as part of the deployment you authorize.
+
+**Vercel:**
+- The production build passes.
+- `vercel.json` adds a CSP that allows `connect-src 'self' https:`, so a backend URL served over plain HTTP would be blocked. Production uses HTTPS.
+- Check the deployed page's console once for CSP violations.
+
+**Neon:** schema changes are additive only. Existing data is untouched. `/admin/cleanup` now also prunes attempt rows older than 7 days.
+
+**Cloudflare Worker:**
+- Typecheck, bundle and the local `wrangler dev` live tests pass.
+- The suspected missing `nodejs_compat` flag was **not reproduced**: the Worker boots and serves in local workerd without it. Recheck after the first hosted deploy.
+- Errors are now logged by class. The Worker has `observability.enabled: false`, so view them with `wrangler tail`.
+
+**CI:** `ci.yml` adds a quality step to the backend job: `ruff` (E9, F), `bandit -ll` and `pip-audit --strict`, all at exact pinned versions. The commands were run locally and pass.
+
+---
+
+# Previous audit (11–12 November 2026)
+
 | Platform | Local evidence | Remaining check |
 | --- | --- | --- |
 | Render Free | Blueprint parses. Inference defaults off and auto-deploy is off. Linux ARM64 and AMD64 images built and passed non-root Uvicorn startup, database initialization, and liveness. FFmpeg handled the supported media formats. | Native AMD64 512 MiB workload and verified proxy attribution. |

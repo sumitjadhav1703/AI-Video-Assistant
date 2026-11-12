@@ -63,7 +63,9 @@ export default {
   async fetch(request: Request, env: WorkerEnv): Promise<Response> {
     try {
       return uncached(await handle(request, env))
-    } catch {
+    } catch (error) {
+      // Error class only: messages can carry SQL or connection details. Lets `wrangler tail` tell outages from bugs.
+      console.error('mcp request failed', error instanceof Error ? error.name : typeof error)
       return uncached(new Response('Temporarily unavailable', { status: 503 }))
     }
   },

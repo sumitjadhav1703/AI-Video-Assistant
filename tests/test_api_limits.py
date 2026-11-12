@@ -363,13 +363,37 @@ class APILimitTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         reserve.assert_not_called()
 
-    def test_empty_upload_releases_slot_and_marks_failed(self):
-        with patch.object(api.db, 'admit_job', return_value='owner'), patch.object(api.db, 'release_slot') as release, patch.object(api.db, 'fail_job') as fail, patch.object(api, 'run_job') as worker:
+    def test_empty_upload_is_rejected_before_admission(self):
+        # Admission charges the daily allowance even if the job later fails, so bad files must stop first.
+        with patch.object(api.db, 'admit_job', return_value='owner') as admit, patch.object(api, 'run_job') as worker:
             response = self.client.post('/jobs', data={'demo_acknowledged': 'true'}, files={'file': ('a.wav', b'')})
         self.assertEqual(response.status_code, 400)
-        release.assert_called_once_with('processing', 'owner')
-        fail.assert_called_once()
+        admit.assert_not_called()
         worker.assert_not_called()
+
+    def test_oversized_upload_is_rejected_before_admission(self):
+        with patch.dict(os.environ, {'MAX_UPLOAD_MB': '1'}), patch.object(api.db, 'admit_job') as admit:
+            response = self.client.post('/jobs', data={'demo_acknowledged': 'true'},
+                                        files={'file': ('a.wav', b'a' * (1024 * 1024 + 1))})
+        self.assertEqual(response.status_code, 413)
+        admit.assert_not_called()
+
+    def test_failed_job_result_is_a_conflict_not_a_server_error(self):
+        with patch.object(api.db, 'get_job', return_value={'status': 'error', 'error': 'Processing failed.'}):
+            response = self.client.get('/jobs/' + 'a' * 32 + '/result')
+        self.assertEqual(response.status_code, 409)
+
+    def test_question_over_embedding_byte_limit_is_rejected_before_reservation(self):
+        with patch.object(api.db, 'reserve_chat') as reserve:
+            response = self.client.post('/jobs/' + 'a' * 32 + '/chat', json={'question': 'क' * 700})
+        self.assertEqual(response.status_code, 422)
+        reserve.assert_not_called()
+
+    def test_api_schema_is_not_public_and_cors_is_not_credentialed(self):
+        self.assertEqual(self.client.get('/openapi.json').status_code, 404)
+        self.assertEqual(self.client.get('/docs').status_code, 404)
+        preflight = self.client.options('/jobs', headers={'Origin': 'http://localhost:5173', 'Access-Control-Request-Method': 'POST'})
+        self.assertNotIn('access-control-allow-credentials', preflight.headers)
 
     def test_status_poll_uses_narrow_query(self):
         with patch.object(api.db, 'get_job_status', return_value={'status': 'running', 'step': 'audio', 'error': None}, create=True), patch.object(api.db, 'get_job') as full_job:

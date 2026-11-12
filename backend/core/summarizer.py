@@ -56,15 +56,18 @@ def summarize(transcript: str) -> str:
                                check=_bounded_partial) for chunk in split_transcript(clean)]
     if not partial:
         return ''
+    if len(partial) == 1:
+        # One map output is already a bounded summary; a reduce call would only spend budget.
+        return '\n'.join('- ' + bullet for bullet in partial[0].bullets)
     partial_texts = ['\n'.join(result.bullets) for result in partial]
     combined = '\n'.join(partial_texts)
     result = structured_call(REDUCE_PROMPT, combined, Summary, max_output_tokens=768, task='summary')
     return '\n'.join('- ' + bullet for bullet in result.bullets)
 
 
-def generate_title(transcipt: str) -> str:
-    validate_transcript(transcipt)
-    clean = sanitize_text(transcipt)
+def generate_title(transcript: str) -> str:
+    validate_transcript(transcript)
+    clean = sanitize_text(transcript)
     return structured_call(TITLE_PROMPT, clean[:2000], Title, max_output_tokens=128, task='title').title
 
 

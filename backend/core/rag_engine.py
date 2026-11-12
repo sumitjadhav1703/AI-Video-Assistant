@@ -1,5 +1,6 @@
 """Grounded answers over required hybrid retrieval with server-owned citations."""
 import json
+import re
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr, ValidationError
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_core.runnables import RunnableLambda
@@ -13,6 +14,9 @@ from .reranker import load_ranker
 from .vector_store import build_vector_store, load_vector_store
 
 ABSTENTION = 'I could not find this information in the meeting transcript.'
+# A citation must carry real evidence: "the" or "a" would otherwise ground any answer.
+MIN_QUOTE_WORDS = 4
+MIN_QUOTE_CHARS = 20
 
 
 class Evidence(BaseModel):
@@ -41,13 +45,12 @@ def _abstain():
 
 
 def _locate_quote(quote, text):
-    """Exact substring, else a case-only variant; returns the transcript's own wording."""
-    if quote in text:
-        return quote
-    start = text.lower().find(quote.lower())
-    if start >= 0 and text[start:start + len(quote)].lower() == quote.lower():
-        return text[start:start + len(quote)]
-    return None
+    """Whole-word, case-insensitive match of a substantial quote; returns the transcript's own wording."""
+    quote = quote.strip()
+    if not quote or (quote != text.strip() and (len(quote.split()) < MIN_QUOTE_WORDS or len(quote) < MIN_QUOTE_CHARS)):
+        return None
+    match = re.search(r'(?<!\w)' + re.escape(quote) + r'(?!\w)', text, re.IGNORECASE)
+    return match.group() if match else None
 
 
 def validate_grounded_answer(raw, documents):
@@ -59,7 +62,7 @@ def validate_grounded_answer(raw, documents):
         citations = []
         for evidence in parsed.evidence:
             quote = _locate_quote(evidence.quote, owned[evidence.chunk_id].page_content) if evidence.chunk_id in owned else None
-            if not evidence.quote.strip() or quote is None:
+            if quote is None:
                 return _abstain()
             doc = owned[evidence.chunk_id]
             citations.append({'chunk_id': evidence.chunk_id, 'text': quote,
@@ -78,7 +81,6 @@ def _require_grounded(raw, documents):
 
 
 def _answer_question(question, job_id, tier, documents, vector_store):
-    question = sanitize_text(question)
     llm = get_llm(tier=tier, task='chat')
     load_ranker()
     context, retrieval = hybrid_retrieve(question, job_id, documents, vector_store)

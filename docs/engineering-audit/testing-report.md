@@ -1,5 +1,57 @@
 # Testing report
 
+## Audit 2 — 13 November 2026
+
+All runs were local: macOS arm64, Python 3.11.15, Node 24.14.0. Disposable pgvector (`pgvector/pgvector:pg16`) ran in Colima Docker on loopback. Provider HTTP was mocked throughout. No test used Neon, Render, Vercel, Cloudflare or a live provider.
+
+| Suite | Command | Before | After |
+| --- | --- | --- | --- |
+| Backend, offline | `PYTHON_DOTENV_DISABLED=1 .venv/bin/python -m unittest discover -s tests` | 242 OK, 39 skipped | **259 OK**, 40 skipped (DB) |
+| Backend + disposable pgvector | same, with `TEST_DATABASE_URL` set | 242 OK, 0 skipped | **259 OK**, 0 skipped |
+| Backend inside the Linux image | `docker run … python -m unittest discover -s tests` | not run | **OK** |
+| Backend in a clean venv from the trimmed lock | same | — | **259 OK**, `pip check` clean, `import langchain` fails as intended |
+| Frontend unit | `cd web && npm test` | 8 pass | **15 pass** (parse tests and api tests added) |
+| Frontend build | `npm run build` | pass | **pass** |
+| Browser: sample page | `node web/tests/sample.browser.mjs` (Playwright 1.63.0) | — | **pass** |
+| Browser: live session (intercepted API) | `node web/tests/live-session.browser.mjs` | **fail** (pre-existing locator bug T1) | **pass** |
+| E2E: real backend, mocked providers | `tests/browser/backend_fixture.py` + `tests/browser/journey.mjs` against a production Vite build | — | **pass** (details below) |
+| MCP typecheck + dry-run bundle | `npm run typecheck`, `npm run build` | pass | **pass** |
+| MCP permissions (Postgres) | `node --test tests/permissions.test.ts` | — | **1 pass** |
+| MCP Worker live (`wrangler dev` + fixtures) | CI recipe, local | — | **3 pass**, 1 skipped by design |
+| Release-script tests | `node --test scripts/release_vercel.test.mjs tests/test_release_worker.mjs` | — | **8 pass** |
+| 512 MiB / 0.1 CPU workload gate | `python -m scripts.benchmark_recruiter_demo … --linux-gate` | **FAIL** | **PASS** (see performance) |
+
+**End-to-end journey details.**
+- Covered: upload of a 2 s clip; an injected polling transport failure that was recovered; results; summary and findings; a cited chat answer; authenticated deletion (200).
+- Timing: results in 6.6 s and chat in 1.1 s, against a backend pipeline time of 2.2 s.
+- After deletion, the database held 0 jobs, 0 chunks, 0 vector collections, 0 embeddings and 0 held slots. Usage counters were retained by design.
+
+**Regression tests added:**
+- `tests/test_audit_regressions.py`: guardrails, chunk tail, timestamp clamp, chat cap, and attempt pruning (DB).
+- Route recovery and blank-finding fallback, in `test_gateway.py`.
+- Trivial and partial quotes, and the whole-chunk quote, in `test_rag_evidence.py`.
+- Upload admission order, 409 result, question byte limit, docs and CORS, in `test_api_limits.py`.
+- `web/src/lib/parse.test.js`, plus 3 new `api.test.js` cases.
+
+**Tests changed to match corrected behaviour:**
+- `test_empty_upload_releases_slot_and_marks_failed` asserted the quota-burning order. It is now `…_is_rejected_before_admission`.
+- The Meta test asserted a single reservation for 4 requests.
+- Evidence fixtures used 2-word quotes.
+- Tests that called the removed wrapper functions now call the live entry points.
+
+**Not run:**
+- Live provider calls (not authorized).
+- Hosted Render, Vercel, Neon and Cloudflare checks (no deployment authorized).
+- Native AMD64 workload: the local machine is arm64. CI runs it on `ubuntu-24.04` AMD64.
+- Hinglish/Sarvam end to end (requires a live provider; covered by unit tests with mocked HTTP).
+- The real-YouTube download path (disabled in the API).
+
+**Test-isolation note:** without `PYTHON_DOTENV_DISABLED=1`, `test_sarvam_piece_quota_denial_does_not_send_extra_audio` fails, because a local `.env` adds a Groq fallback profile. CLAUDE.md already requires the variable, and CI sets it.
+
+---
+
+# Previous audit (11–12 November 2026)
+
 ## Executed checks
 
 | Check | Evidence |

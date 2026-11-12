@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { SANS, MONO, CREAM, SUBTLE, MUTE } from '../lib/theme';
+import { SANS, MONO, CREAM, SUBTLE, MUTE, DIM } from '../lib/theme';
 import { humanSize } from '../lib/parse';
 
 const ACCEPT = '.mp3,.wav,.m4a,.mp4,.mov,.mkv,.webm,.aac,.ogg,.flac';
@@ -70,6 +70,14 @@ export default function Empty({ mode, languages = ['english'], submitting, onAna
   const chooseFile = (f) => {
     if (!f || submitting) return;
     clearDemo();
+    const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();
+    // Drag-and-drop ignores the input's accept list, so check it here too.
+    if (!ACCEPT.split(',').includes(ext) || (f.type && !/^(audio|video)\//.test(f.type))) {
+      setFile(null);
+      setSizeError(`“${f.name}” is not a supported audio or video file. Choose MP3, WAV, M4A, MP4, MOV, MKV, WEBM, AAC, OGG or FLAC.`);
+      if (inputRef.current) inputRef.current.value = '';
+      return;
+    }
     if (f.size > MAX_UPLOAD_BYTES || f.size === 0) {
       setFile(null);
       setSizeError(f.size ? `“${f.name}” is ${humanSize(f.size)}. Choose a file up to 25 MiB.` : 'Choose a file that contains audio.');
@@ -115,7 +123,9 @@ export default function Empty({ mode, languages = ['english'], submitting, onAna
   };
 
   useEffect(() => {
-    const iv = setInterval(() => setHeroIdx((i) => i + 1), 2600);
+    // A constantly changing heading is motion; keep the first word when reduced motion is requested.
+    const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const iv = still ? undefined : setInterval(() => setHeroIdx((i) => i + 1), 2600);
     return () => {
       clearInterval(iv);
       const request = demoRequest.current;
@@ -134,7 +144,6 @@ export default function Empty({ mode, languages = ['english'], submitting, onAna
     if (!canAnalyse) return;
     onAnalyse({ file, inviteCode: invited ? inviteCode.trim() : undefined,
                 language: hinglishReady ? language : 'english' });
-    setInviteCode('');
   };
 
   const tabStyle = (active) => ({
@@ -405,7 +414,7 @@ export default function Empty({ mode, languages = ['english'], submitting, onAna
               aria-describedby={showUploadNotice ? 'demo-privacy' : undefined}
               style={{
                 background: canAnalyse ? CREAM : 'transparent',
-                color: canAnalyse ? '#0e0e0d' : '#57544e',
+                color: canAnalyse ? '#0e0e0d' : DIM,
                 border: canAnalyse ? '1.5px solid #e8e5de' : '1.5px solid rgba(232,229,222,0.18)',
                 boxShadow: canAnalyse ? '6px 6px 0 rgba(232,229,222,0.25)' : 'none',
                 fontFamily: MONO,
@@ -426,7 +435,7 @@ export default function Empty({ mode, languages = ['english'], submitting, onAna
               Invite code
               <input type="password" autoComplete="off" value={inviteCode} disabled={submitting}
                 onChange={(event) => setInviteCode(event.target.value)}
-                style={{ background: 'transparent', color: CREAM, border: '1px solid #57544e', borderRadius: 8, padding: '8px 12px', maxWidth: '100%' }} />
+                style={{ background: 'transparent', color: CREAM, border: `1px solid ${DIM}`, borderRadius: 8, padding: '8px 12px', maxWidth: '100%' }} />
             </label>
           )}
           {mode === 'loading' && <p role="status" style={noteStyle}>Checking live availability…</p>}

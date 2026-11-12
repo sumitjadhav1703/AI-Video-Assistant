@@ -17,7 +17,7 @@ COPY scripts/prepare_reranker.py ./scripts/prepare_reranker.py
 RUN python scripts/prepare_reranker.py
 
 # Render injects $PORT.
-ENV PORT=8000 HOME=/tmp
+ENV PORT=8000 HOME=/tmp PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 # Uploaded media is decoded by an unprivileged process.
 USER 65532:65532
 # Keep job identifiers out of access logs.

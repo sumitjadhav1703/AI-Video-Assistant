@@ -1,5 +1,61 @@
 # Performance and optimization
 
+## Audit 2 — 13 November 2026
+
+Only measured numbers are reported. "n" is the number of runs; single runs at 0.1 CPU are noisy.
+
+### 512 MiB / 0.1 CPU workload gate (CI recipe)
+
+**Setup:**
+- Linux arm64 (Colima), with the same 120 s synthetic video and the same disposable pgvector for both images. Run once each (n=1).
+- Ran `python -m scripts.benchmark_recruiter_demo … --linux-gate` with `--memory 512m --memory-swap 512m --cpus 0.1`.
+- The original image was built from `6ac48a2`; the fixed image from this branch.
+
+| Metric | Original | Fixed |
+| --- | --- | --- |
+| Gate result | **FAIL**: "exceeded the release memory threshold" | **PASS** |
+| cgroup peak memory | 465.2 MiB | **425.0 MiB** (−40.2) |
+| Python peak RSS | 408.3 MiB | **374.6 MiB** (−33.7) |
+| OOM events | 0 | 0 |
+| App import + startup | 22.8 s | **12.9 s** |
+| First job title stage | 58.6 s (1.4 s under the 60 s deadline) | **10.6 s** |
+| First job total | 78.4 s | 86.6 s (LiteLLM import moved earlier; noisy at 0.1 CPU) |
+| Warm job / warm chat | 11.6 s / 2.5 s | 11.0 s / 1.6 s |
+| Generation calls for 3 jobs | 15 | **12** |
+| Leftover temp files | 0 bytes | 0 bytes |
+| Image size | 1.75 GB | **1.69 GB** |
+
+On the first fixed-image run, before the B1 fix, title generation took 60.2 s and the job failed. The original image passed that stage by only 1.4 s. The previous audit's AMD64 failure "at title generation after 101.5 s" is the same defect.
+
+### Import cost on macOS arm64 (`import backend.api`, n=5 mean)
+
+| | Original | Fixed |
+| --- | --- | --- |
+| Peak RSS | 130.3 MiB | **112.3 MiB** |
+| Import time | 604 ms | **484 ms** |
+
+Isolated import deltas measured: `langchain.agents.middleware.pii` +47.9 MiB / 258 ms, and `yt_dlp` +26.0 MiB / 73 ms. Part of that is shared with other modules, so the whole-app saving is smaller than the sum.
+
+### Changes made
+
+- **Imports:** removed `langchain.agents` (PII detectors replaced by local regexes) and `langchain_community` (`BM25Okapi` is now called directly). Ranking parity: 0 of 500 randomized query/corpus pairs differ.
+- **Lazy `yt_dlp`:** imported only on the CLI download path.
+- **BM25:** each document is tokenized once instead of three times per query.
+- **Reranker:** the token-counting tokenizer is built once per process, not on every chat.
+- **PGVector:** one pooled engine replaces a new engine per call. No `CREATE EXTENSION` per chat.
+- **Fewer model calls:** no reduce call for a single summary partial (−1 call per short job).
+- **Gateway:** a transient failure no longer disables a route for the job, which avoids needless fallback calls and failures.
+
+### Considered and not changed (no measured benefit)
+
+- **psycopg connection pool:** each DB call opens a TLS connection to Neon. A pool to a free Neon endpoint that autosuspends adds stale-connection risk, and the latency gain could not be measured without Neon.
+- **LiteLLM `Router` per call:** the cost is negligible next to the network call.
+- **Repeated `sanitize_text` on the chat path:** about microseconds per chunk, and it is defense in depth.
+
+---
+
+# Previous audit (11–12 November 2026)
+
 ## Before and after
 
 | Check | Before | After |

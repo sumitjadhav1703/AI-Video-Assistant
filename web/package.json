@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test src/api.test.js"
+    "test": "node --test src/api.test.js src/lib/parse.test.js"
   },
   "dependencies": {
     "react": "^18.3.1",

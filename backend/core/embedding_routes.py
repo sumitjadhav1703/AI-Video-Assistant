@@ -27,7 +27,7 @@ _KEYS = {
 }
 _LIMITS = ('rpm', 'tpm', 'rpd')
 _CONFIG_FIELDS = {'id', 'verified_free', *_LIMITS}
-_MAX_TEXT_BYTES = 2048
+MAX_TEXT_BYTES = 2048
 _QUERY_INSTRUCTION = 'Given a question, retrieve relevant video transcript passages that answer it.'
 
 
@@ -139,7 +139,7 @@ def _input_bound(route, sanitized, query):
     if len(sanitized) > route.batch_size:
         raise ValueError(f'Embedding batches are limited to {route.batch_size} documents')
     bounds = [len(text.encode('utf-8')) for text in sanitized]
-    if any(not 1 <= bound <= _MAX_TEXT_BYTES for bound in bounds):
+    if any(not 1 <= bound <= MAX_TEXT_BYTES for bound in bounds):
         raise ValueError('Embedding input exceeds its conservative 2048-token bound')
     overhead = 0
     if route.provider in ('openrouter', 'nvidia_nim'):

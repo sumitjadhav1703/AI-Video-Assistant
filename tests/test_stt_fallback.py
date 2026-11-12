@@ -121,8 +121,8 @@ class ChunkFallbackTests(unittest.TestCase):
                          {'model': 'muse-voice-transcribe-1.0', 'mode': 'ENDPOINTING', 'audioEncoding': 'WAV', 'languageBias': ['en']})
         self.assertTrue(kwargs['files']['audio'][1].startswith(b'RIFF'))
         self.assertEqual(sorted((s['start'], s['end']) for s in segments), [(0.5, 4.0), (30.5, 34.0), (60.5, 64.0), (90.5, 94.0)])
-        reserve.assert_called_once()
-        self.assertEqual(reserve.call_args.args[2], 120000)
+        # Four requests are sent, so four requests count against the provider's rpm/rpd limits.
+        self.assertEqual([call.args[2] for call in reserve.call_args_list], [30000] * 4)
 
 
 class HinglishRouteTests(unittest.TestCase):

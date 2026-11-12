@@ -1,4 +1,4 @@
-import { SANS, MONO, CREAM, DIM, STAGE_NAMES } from '../lib/theme';
+import { SANS, MONO, CREAM, MUTE, DIM, STAGE_NAMES } from '../lib/theme';
 
 const pad3 = (n) => String(Math.round(n)).padStart(3, '0');
 
@@ -28,7 +28,7 @@ export default function Processing({ fileName, stageIdx }) {
       borderTop: i === 0 ? 'none' : '1px solid rgba(232,229,222,0.10)',
       color: done || active ? CREAM : DIM,
       status: done ? 'Done' : active ? 'In progress' : 'Waiting',
-      statusColor: done ? '#6f6c65' : active ? CREAM : '#3a3833',
+      statusColor: done ? MUTE : active ? CREAM : DIM,
       anim: active ? 'pulseDot 1.4s ease infinite' : 'none',
     };
   });
@@ -59,7 +59,7 @@ export default function Processing({ fileName, stageIdx }) {
           fontFamily: MONO,
           fontSize: 11,
           letterSpacing: '0.08em',
-          color: '#6f6c65',
+          color: MUTE,
           marginBottom: 26,
           animation: 'fadeIn .6s ease both',
           wordBreak: 'break-word',
@@ -67,6 +67,9 @@ export default function Processing({ fileName, stageIdx }) {
       >
         Processing — {fileName}
       </div>
+      <p className="visually-hidden" aria-live="polite">
+        {stageIdx >= 0 && stageIdx < STAGE_NAMES.length ? `Stage ${stageIdx + 1} of ${STAGE_NAMES.length}: ${STAGE_NAMES[stageIdx]}` : ''}
+      </p>
       <h1
         style={{
           margin: '0 0 7vh',

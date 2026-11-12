@@ -4,6 +4,10 @@ const PROD_RAW = ENV.VITE_BACKEND_URL || '';
 export const BACKEND_URL = ENV.PROD ? PROD_RAW.trim().replace(/\/+$/, '') : '/api';
 
 const TIMEOUT = 180000;
+// A 25 MiB upload on a slow link can outlast the read timeout.
+const UPLOAD_TIMEOUT = 15 * 60 * 1000;
+export const UPLOAD_TIMEOUT_HINT =
+  'The upload timed out. The server may still be processing it, so wait a few minutes before uploading again.';
 export const COLD_START_HINT =
   'The backend did not respond in time. The free instance may be waking up.';
 
@@ -15,14 +19,14 @@ export class BackendError extends Error {
   }
 }
 
-async function callBackend(method, path, { body, headers, signal, valid } = {}) {
+async function callBackend(method, path, { body, headers, signal, valid, timeout = TIMEOUT, timeoutMessage = COLD_START_HINT } = {}) {
   if (!BACKEND_URL) throw new BackendError('Backend URL is not configured.');
 
   const controller = new AbortController();
   const abort = () => controller.abort();
   if (signal?.aborted) abort();
   else signal?.addEventListener('abort', abort, { once: true });
-  const timer = setTimeout(abort, TIMEOUT);
+  const timer = setTimeout(abort, timeout);
 
   try {
     const response = await fetch(`${BACKEND_URL}${path}`, {
@@ -32,12 +36,13 @@ async function callBackend(method, path, { body, headers, signal, valid } = {}) 
       if (controller.signal.aborted) throw error;
       return null;
     });
+    if (response.status === 204) return {};
     if (response.ok) {
       if (payload && (!valid || valid(payload))) return payload;
       throw new BackendError('The backend returned an invalid response.', 502);
     }
 
-    const retryAfter = response.status === 429 ? response.headers.get('Retry-After') : null;
+    const retryAfter = [429, 503].includes(response.status) ? response.headers.get('Retry-After') : null;
     let retryAfterMs = 0;
     let message = typeof payload?.detail === 'string'
       ? payload.detail
@@ -51,7 +56,7 @@ async function callBackend(method, path, { body, headers, signal, valid } = {}) 
     throw new BackendError(message, response.status, retryAfterMs);
   } catch (error) {
     if (signal?.aborted || error instanceof BackendError) throw error;
-    if (error.name === 'AbortError') throw new BackendError(COLD_START_HINT);
+    if (error.name === 'AbortError') throw new BackendError(timeoutMessage);
     throw new BackendError(`Could not reach the backend. ${COLD_START_HINT}`);
   } finally {
     clearTimeout(timer);
@@ -67,7 +72,7 @@ export function startJob({ file, inviteCode, language = 'english' }) {
   form.append('language', language === 'hinglish' ? 'hinglish' : 'english');
   form.append('demo_acknowledged', 'true');
   const headers = inviteCode ? { 'X-Demo-Invite': inviteCode } : undefined;
-  return callBackend('POST', '/jobs', { body: form, headers });
+  return callBackend('POST', '/jobs', { body: form, headers, timeout: UPLOAD_TIMEOUT, timeoutMessage: UPLOAD_TIMEOUT_HINT });
 }
 
 const jobPath = ({ id }) => `/jobs/${encodeURIComponent(id)}`;

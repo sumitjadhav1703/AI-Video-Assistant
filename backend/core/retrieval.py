@@ -24,16 +24,17 @@ def _key(document):
 
 
 def sparse_candidates(documents, query, k=10):
-    from langchain_community.retrievers import BM25Retriever
+    from rank_bm25 import BM25Okapi  # same scorer and defaults LangChain's BM25Retriever wraps
     tokens = tokenize(query)
-    documents = [doc for doc in documents if tokenize(doc.page_content)]
-    if not documents or not tokens:
+    corpus = [(doc, tokenize(doc.page_content)) for doc in documents]
+    corpus = [(doc, words) for doc, words in corpus if words]
+    if not corpus or not tokens:
         return []
-    retriever = BM25Retriever.from_documents(documents, preprocess_func=tokenize, k=k)
-    scores = retriever.vectorizer.get_scores(tokens)
+    scores = BM25Okapi([words for _, words in corpus]).get_scores(tokens)
+    query_terms = set(tokens)
     # BM25 IDF can legitimately be zero or negative; lexical overlap is the match gate.
-    ranked = [(doc, float(score)) for doc, score in zip(documents, scores)
-              if set(tokens).intersection(tokenize(doc.page_content))]
+    ranked = [(doc, float(score)) for (doc, words), score in zip(corpus, scores)
+              if not query_terms.isdisjoint(words)]
     ranked.sort(key=lambda item: (-item[1], *_key(item[0])))
     return [doc for doc, _ in ranked[:k]]
 
