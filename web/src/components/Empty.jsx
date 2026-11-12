@@ -4,14 +4,38 @@ import { humanSize } from '../lib/parse';
 
 const ACCEPT = '.mp3,.wav,.m4a,.mp4,.mov,.mkv,.webm,.aac,.ogg,.flac';
 const HERO_WORDS = ['remembered.', 'recorded.', 'summarised.', 'answered.', 'searchable.'];
-const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+const ANALYSED_SECONDS = 600;
 const DEMO_CLIPS = [
-  { title: 'Onboarding pilot review', filename: 'onboarding-pilot.mp4' },
-  { title: 'Release readiness review', filename: 'release-readiness.mp4' },
+  { title: 'Large language models explained', filename: 'llm-explained.mp3' },
+  { title: 'Generative AI explained', filename: 'generative-ai-explained.mp3' },
+  { title: 'How AI images and videos work', filename: 'ai-images-videos.mp3' },
 ];
+// Resolves to duration in seconds, or null if it cannot be read (errors/timeouts are silent).
+const readDuration = (file) => new Promise((resolve) => {
+  const url = URL.createObjectURL(file);
+  const media = document.createElement(file.type.startsWith('video/') ? 'video' : 'audio');
+  const done = (value) => {
+    clearTimeout(timer);
+    media.removeAttribute('src');
+    media.load();
+    URL.revokeObjectURL(url);
+    resolve(value);
+  };
+  const timer = setTimeout(() => done(null), 8000);
+  media.preload = 'metadata';
+  media.onloadedmetadata = () => done(Number.isFinite(media.duration) ? media.duration : null);
+  media.onerror = () => done(null);
+  media.src = url;
+});
+const youtubeHintStyle = {
+  position: 'absolute', top: 'calc(100% + 10px)', right: 0, zIndex: 5, width: 'min(320px, 80vw)',
+  padding: '12px 14px', borderRadius: 12, border: '1px solid rgba(232,229,222,0.25)', background: '#1c1b19',
+  color: CREAM, fontFamily: SANS, fontSize: 13, lineHeight: 1.55, textAlign: 'left', boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+};
 const noteStyle = { margin: '14px 2px 0', fontFamily: MONO, fontSize: 11, lineHeight: 1.7, color: MUTE };
 
-export default function Empty({ mode, submitting, onAnalyse, onRetryAvailability, uploadError, notice }) {
+export default function Empty({ mode, languages = ['english'], submitting, onAnalyse, onRetryAvailability, uploadError, notice }) {
   const [file, setFile] = useState(null);
   const [inviteCode, setInviteCode] = useState('');
   const [dragOver, setDragOver] = useState(false);
@@ -20,8 +44,20 @@ export default function Empty({ mode, submitting, onAnalyse, onRetryAvailability
   const [selectedDemo, setSelectedDemo] = useState(null);
   const [loadingDemo, setLoadingDemo] = useState(null);
   const [demoError, setDemoError] = useState('');
+  const [durationSec, setDurationSec] = useState(null);
+  const [youtubeHint, setYoutubeHint] = useState(false);
+  const [language, setLanguage] = useState('english');
+  const hinglishReady = languages.includes('hinglish');
   const inputRef = useRef(null);
   const demoRequest = useRef(null);
+
+  useEffect(() => {
+    setDurationSec(null);
+    if (!file) return undefined;
+    let stale = false;
+    readDuration(file).then((d) => { if (!stale) setDurationSec(d); }, () => {});
+    return () => { stale = true; };
+  }, [file]);
 
   const clearDemo = () => {
     demoRequest.current?.abort();
@@ -36,7 +72,7 @@ export default function Empty({ mode, submitting, onAnalyse, onRetryAvailability
     clearDemo();
     if (f.size > MAX_UPLOAD_BYTES || f.size === 0) {
       setFile(null);
-      setSizeError(f.size ? `“${f.name}” is ${humanSize(f.size)}. Choose a file up to 10 MiB.` : 'Choose a file that contains audio.');
+      setSizeError(f.size ? `“${f.name}” is ${humanSize(f.size)}. Choose a file up to 25 MiB.` : 'Choose a file that contains audio.');
       if (inputRef.current) inputRef.current.value = '';
       return;
     }
@@ -56,13 +92,13 @@ export default function Empty({ mode, submitting, onAnalyse, onRetryAvailability
         signal: request.signal,
         redirect: 'error',
       });
-      if (!response.ok || response.headers.get('content-type')?.split(';')[0] !== 'video/mp4'
+      if (!response.ok || response.headers.get('content-type')?.split(';')[0] !== 'audio/mpeg'
           || Number(response.headers.get('content-length')) > MAX_UPLOAD_BYTES) throw new Error();
       const blob = await response.blob();
       if (request.signal.aborted) return;
       if (!blob.size || blob.size > MAX_UPLOAD_BYTES) throw new Error();
       if (inputRef.current) inputRef.current.value = '';
-      setFile(new File([blob], clip.filename, { type: 'video/mp4' }));
+      setFile(new File([blob], clip.filename, { type: 'audio/mpeg' }));
       setSizeError('');
       setSelectedDemo(clip);
     } catch {
@@ -96,7 +132,8 @@ export default function Empty({ mode, submitting, onAnalyse, onRetryAvailability
   const submit = (event) => {
     event.preventDefault();
     if (!canAnalyse) return;
-    onAnalyse({ file, inviteCode: invited ? inviteCode.trim() : undefined });
+    onAnalyse({ file, inviteCode: invited ? inviteCode.trim() : undefined,
+                language: hinglishReady ? language : 'english' });
     setInviteCode('');
   };
 
@@ -129,9 +166,30 @@ export default function Empty({ mode, submitting, onAnalyse, onRetryAvailability
             <button type="button" aria-pressed="true" data-hov="1" style={tabStyle(true)}>
               Upload file
             </button>
-            <button type="button" disabled aria-label="YouTube URL (unavailable)" style={tabStyle(false)}>
-              YouTube URL
-            </button>
+            <span
+              style={{ position: 'relative', display: 'inline-block' }}
+              onMouseEnter={() => setYoutubeHint(true)}
+              onMouseLeave={() => setYoutubeHint(false)}
+            >
+              {/* aria-disabled, not disabled: disabled buttons get no hover, focus or click to explain themselves. */}
+              <button
+                type="button"
+                aria-disabled="true"
+                aria-label="YouTube URL (unavailable)"
+                aria-describedby="youtube-unavailable"
+                onClick={() => setYoutubeHint((shown) => !shown)}
+                onFocus={() => setYoutubeHint(true)}
+                onBlur={() => setYoutubeHint(false)}
+                style={{ ...tabStyle(false), cursor: 'not-allowed' }}
+              >
+                YouTube URL
+              </button>
+              <span id="youtube-unavailable" role="tooltip" hidden={!youtubeHint} style={youtubeHintStyle}>
+                YouTube links aren&rsquo;t supported here: YouTube blocks downloads from hosted servers.
+                Download the video and upload the file instead. Running locally? The command-line tool
+                (<code>python -m backend.cli</code>) accepts YouTube links when <code>ENABLE_YOUTUBE=true</code>.
+              </span>
+            </span>
           </div>
         </div>
 
@@ -187,7 +245,7 @@ export default function Empty({ mode, submitting, onAnalyse, onRetryAvailability
                 Drop a recording here.
               </span>
               <span style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.05em', color: MUTE }}>
-                MP3 · WAV · MP4 · MOV — up to 10 MiB and 120 seconds, or click to browse
+                MP3 · WAV · MP4 · MOV — up to 25 MiB; the first 10 minutes are analysed
               </span>
             </button>
           ) : (
@@ -279,6 +337,11 @@ export default function Empty({ mode, submitting, onAnalyse, onRetryAvailability
             {demoError && <p role="alert" className="minutes-demo-status">{demoError}</p>}
           </section>
 
+          {file && durationSec > ANALYSED_SECONDS && (
+            <p role="status" style={noteStyle}>
+              This recording is {Math.round(durationSec / 60)} min. Only the first {ANALYSED_SECONDS / 60} minutes will be analysed.
+            </p>
+          )}
           {showUploadNotice && (
             <p id="demo-privacy" style={{ ...noteStyle, color: SUBTLE }}>
               Analyse sends audio to a third-party transcription provider. Use only synthetic or public, non-personal material.
@@ -312,7 +375,8 @@ export default function Empty({ mode, submitting, onAnalyse, onRetryAvailability
               <select
                 id="minutes-language"
                 data-hov="1"
-                defaultValue="english"
+                value={hinglishReady ? language : 'english'}
+                onChange={(e) => setLanguage(e.target.value)}
                 disabled={submitting}
                 style={{
                   background: '#0e0e0d',
@@ -328,7 +392,9 @@ export default function Empty({ mode, submitting, onAnalyse, onRetryAvailability
                 }}
               >
                 <option value="english">English</option>
-                <option value="hinglish" disabled>Hinglish (unavailable)</option>
+                <option value="hinglish" disabled={!hinglishReady}>
+                  {hinglishReady ? 'Hinglish / Hindi (translated to English)' : 'Hinglish (unavailable)'}
+                </option>
               </select>
             </div>
             <button

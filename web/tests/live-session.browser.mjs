@@ -21,7 +21,7 @@ try {
     transcript: 'A synthetic transcript used in the layout regression test.',
   };
   const requests = [];
-  const demoPath = '/demo-clips/onboarding-pilot.mp4';
+  const demoPath = '/demo-clips/llm-explained.mp3';
   let demoAttempts = 0;
   let releaseDemo;
   const demoReady = new Promise((resolve) => { releaseDemo = resolve; });
@@ -148,8 +148,8 @@ try {
     assert.equal(request.headers.authorization, 'Bearer test-capability');
   }
 
-  const demo = page.getByRole('button', { name: /Onboarding pilot review/ });
-  await page.getByRole('button', { name: /Release readiness review/ }).waitFor();
+  const demo = page.getByRole('button', { name: /Large language models explained/ });
+  await page.getByRole('button', { name: /Generative AI explained/ }).waitFor();
   const fileInput = page.locator('input[type=file]');
   await fileInput.setInputFiles({
     name: 'keep-on-failure.mp4', mimeType: 'video/mp4', buffer: Buffer.from('synthetic video'),
@@ -168,7 +168,7 @@ try {
   }
   await page.getByText('Demo clip loaded.', { exact: true }).waitFor();
   const selectedCard = page.getByRole('button', { name: /Remove/ }).locator('..');
-  await selectedCard.getByText('Onboarding pilot review', { exact: true }).waitFor();
+  await selectedCard.getByText('Large language models explained', { exact: true }).waitFor();
   assert.ok(await analyse.isDisabled(), 'Demo clips still require an invite in invited mode');
   assert.equal(await page.getByRole('checkbox').count(), 0);
   await page.getByLabel(/invite code/i).fill('test-invite');
@@ -179,7 +179,7 @@ try {
   await analyse.click();
   const demoRequest = await demoUpload;
   assert.equal(demoRequest.headers()['x-demo-invite'], 'test-invite');
-  assert.match(demoRequest.postData(), /name="file"; filename="onboarding-pilot\.mp4"/);
+  assert.match(demoRequest.postData(), /name="file"; filename="llm-explained\.mp3"/);
   assert.match(demoRequest.postData(), /name="demo_acknowledged"\r\n\r\ntrue/);
   console.log('Restored Minutes upload, progress, cited chat, mobile transcript, refresh, and authenticated deletion passed');
   console.log('Demo picker preserved the manual file on failure and uploaded the selected clip on Analyse');

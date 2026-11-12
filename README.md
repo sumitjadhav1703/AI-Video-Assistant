@@ -33,7 +33,7 @@ Default policy:
 | Work | Limit |
 |---|---|
 | Clip submissions | 1 per client and 5 globally per UTC day |
-| Media | 10 MiB upload, 2 minutes maximum |
+| Media | 25 MiB upload; the first 10 minutes are analysed |
 | Chat | 2 per client/minute, 3 per job/day, 15 globally/day |
 | Concurrent work | One processing job and one chat request globally |
 | Text | 1,000-character question, 40,000-character transcript, 1,024 output tokens per generation |
@@ -170,10 +170,10 @@ Ensure `.env` contains:
 - `DATABASE_URL`
 - `LLM_ROUTES_JSON`, `STT_PROFILES_JSON`, `EMBEDDING_ROUTES_JSON` and provider keys after account verification. See the [local PostgreSQL and provider setup](docs/HYBRID_IMPLEMENTATION.md#local-setup).
 - `FRONTEND_ORIGIN` (Optional for local dev, needed for production CORS)
-- `MAX_UPLOAD_MB` (optional, defaults to `10`; the recruiter demo ceiling is 10 MiB)
+- `MAX_UPLOAD_MB` (optional, defaults to `25`; the ceiling is 25 MiB)
 - `ENABLE_PROVIDER_CALLS`, `RATE_LIMIT_SECRET`, and the quota controls documented above (see `.env.example`)
 - `DEMO_LIVE_MODE` (defaults to `sample`), `JOB_TOKEN_SECRET` for live mode, and `DEMO_INVITE_CODE` for invited mode
-- `MAX_MEDIA_SECONDS` (optional, defaults to `120`; the recruiter demo ceiling is two minutes)
+- `MAX_MEDIA_SECONDS` (optional, defaults to `600`; longer recordings are trimmed to this ceiling of ten minutes)
 - `ADMIN_TOKEN` (Optional — enables the token-gated `/admin/cleanup` endpoint; unset means the endpoint stays disabled)
 
 ### 2. Backend setup
@@ -245,6 +245,6 @@ curl -X POST "https://<backend-url>/admin/cleanup?older_than_days=1" \
 
 - **Cold starts:** Render's free tier sleeps the backend after 15 minutes idle; the first request afterwards takes up to ~60s. The frontend surfaces this as a "waking up" message rather than an error.
 - **Memory:** Audio is decoded and chunked in a single streaming `ffmpeg` pass (`-vn -ac 1 -ar 16000 -f segment`), so memory stays flat regardless of length. This replaced an in-memory `pydub` path that loaded the whole file's PCM into RAM twice and exceeded Render's 512MB limit on long uploads.
-- **Upload cap:** A request-body limit runs before multipart parsing with bounded overhead. The route also verifies the file size and duration. The frontend blocks files above 10 MiB before upload.
+- **Upload cap:** A request-body limit runs before multipart parsing with bounded overhead. The route also verifies the file size and duration. The frontend blocks files above 25 MiB before upload and warns when only the first 10 minutes will be analysed.
 - **Ephemeral Storage:** Audio files are heavily chunked to fit API payload limits (e.g., Groq's 25MB cap) and are immediately deleted post-transcription. No raw audio is persistently stored.
 - **CORS:** `FRONTEND_ORIGIN` must be the exact origin with **no trailing slash** — browsers never send one, so a trailing slash silently blocks every request.

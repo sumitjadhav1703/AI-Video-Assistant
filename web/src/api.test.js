@@ -59,6 +59,19 @@ test('availability is unauthenticated and invite is sent only on an invited uplo
   assert.equal(form.get('demo_acknowledged'), 'true');
 });
 
+test('upload sends hinglish only when chosen and never an arbitrary language', async () => {
+  const forms = [];
+  globalThis.fetch = async (url, options) => {
+    forms.push(options.body);
+    return new Response('{}');
+  };
+  const file = Object.assign(new Blob(['clip'], { type: 'audio/wav' }), { name: 'clip.wav' });
+  await startJob({ file, language: 'hinglish' });
+  await startJob({ file, language: 'klingon' });
+  assert.equal(forms[0].get('language'), 'hinglish');
+  assert.equal(forms[1].get('language'), 'english');
+});
+
 test('every job operation uses bearer auth and chat sends economy', async () => {
   const requests = [];
   const result = { title: 'Title', summary: 'Summary', transcript: 'Transcript',

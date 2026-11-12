@@ -8,6 +8,7 @@ from langchain_core.documents import Document
 from backend.core import telemetry
 from backend.core.retrieval import hybrid_retrieve
 from backend.core.transcriber import transcribe_segments
+from stt_fixture import groq_chain
 
 
 class TelemetryTests(unittest.TestCase):
@@ -23,6 +24,7 @@ class TelemetryTests(unittest.TestCase):
                 pass
 
     def test_retrieval_and_transcription_do_not_log_private_content(self):
+        self.enterContext(groq_chain())
         secret = 'alice@example.com'
         doc = Document(id='job:0', page_content=secret, metadata={'job_id': 'job', 'ordinal': 0, 'chunk_id': 'job:0'})
         store = Mock()

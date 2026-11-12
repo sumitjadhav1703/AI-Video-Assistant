@@ -94,11 +94,14 @@ class GatewayTests(unittest.TestCase):
                 self.assertEqual(body['max_completion_tokens' if provider == 'meta' else 'max_tokens'], 128)
                 if provider == 'openrouter':
                     self.assertEqual(body['provider'], {'allow_fallbacks': False, 'max_price': {'prompt': 0, 'completion': 0, 'request': 0}})
+                    self.assertEqual(body['reasoning'], {'enabled': False})
                     self.assertNotIn('models', body)
                 if provider == 'nvidia_nim':
                     self.assertFalse(body['chat_template_kwargs']['enable_thinking'])
                 if provider == 'meta':
                     self.assertEqual(body['reasoning_effort'], 'minimal')
+                if provider == 'groq':
+                    self.assertEqual(body['reasoning_effort'], 'low')
                 if status == 'timeout':
                     raise httpx.ReadTimeout('offline timeout', request=request)
                 if status != 200:
@@ -199,7 +202,7 @@ class GatewayTests(unittest.TestCase):
         attempts = forecast.call_args.args[1]
         stages = forecast.call_args.kwargs['generation_stages']
         self.assertEqual(len(attempts), 2)
-        self.assertEqual([stage[2] for stage in stages], [128, 256, 768, 1024, 1024])
+        self.assertEqual([stage[2] for stage in stages], [128, 512, 768, 1024, 1024])
         self.assertTrue(all(stage[0][0].model == ROUTE['model'] for stage in stages))
 
     def test_over_budget_recording_preflight_makes_no_generation_or_embedding_call(self):
@@ -354,7 +357,7 @@ class GatewayTests(unittest.TestCase):
             self.assertEqual(result.content, 'Ready')
             self.assertEqual(events, ['reserved', 'network'])
 
-    def test_fallback_only_transient_and_never_silently_strong(self):
+    def test_any_provider_error_falls_back_but_never_silently_strong(self):
         groq = {**ROUTE, 'alias': 'groq', 'provider': 'groq', 'model': 'groq/test', 'api_key_env': 'GROQ_API_KEY'}
         routes = [ROUTE, groq, {**ROUTE, 'alias': 'strong', 'tier': 'strong'}]
         env = {**ENV, 'LLM_ROUTES_JSON': json.dumps(routes), 'GROQ_API_KEY': 'offline'}
@@ -371,14 +374,11 @@ class GatewayTests(unittest.TestCase):
                     patch('backend.core.provider_budget.record_route_cooldown') as cooldown, \
                     patch.object(gateway, '_invoke_route', side_effect=call), gateway.operation_scope('job-1'):
                 model = gateway.get_llm()
-                if status in (429, 503):
-                    self.assertEqual(model.invoke('hello').content, 'Ready')
-                    self.assertEqual(model.invoke('follow-up').content, 'Ready')
-                    self.assertEqual([item.args[1].alias for item in reserve.call_args_list], ['groq', 'demo-a', 'demo-a'])
-                else:
-                    with self.assertRaisesRegex(RuntimeError, 'provider request failed'):
-                        model.invoke('hello')
-                    self.assertEqual([item.args[1].alias for item in reserve.call_args_list], ['groq'])
+                # Every provider error falls back within the tier; the broken route is skipped for the rest of
+                # the job, and the strong tier is never used silently.
+                self.assertEqual(model.invoke('hello').content, 'Ready')
+                self.assertEqual(model.invoke('follow-up').content, 'Ready')
+                self.assertEqual([item.args[1].alias for item in reserve.call_args_list], ['groq', 'demo-a', 'demo-a'])
                 if status == 429:
                     cooldown.assert_called_once_with(gateway.Route(**groq), 60)
                 else:
@@ -474,12 +474,37 @@ class GatewayTests(unittest.TestCase):
             self.assertEqual(extractor.extract_key_decisions('Planning notes'), '1. Use Python')
             self.assertEqual(extractor.extract_questions('Planning notes'), 'No open questions found.')
 
-    def test_invalid_structured_output_is_rejected_without_retry(self):
+    def test_invalid_structured_output_with_no_other_route_fails_after_one_call(self):
         with patch.dict(os.environ, ENV, clear=True), patch('backend.core.provider_budget.reserve_attempt'), \
+                patch('backend.core.provider_budget.record_attempt_result'), \
                 patch.object(gateway, '_invoke_route', return_value=AIMessage(content='free text')) as network, \
-                gateway.operation_scope('job-1'), self.assertRaises(ValueError):
+                gateway.operation_scope('job-1'), self.assertRaisesRegex(RuntimeError, 'No eligible'):
             summarizer.generate_title('Planning notes')
         self.assertEqual(network.call_count, 1)
+
+    def test_invalid_or_truncated_output_falls_back_to_the_next_route(self):
+        groq = {**ROUTE, 'alias': 'groq-a', 'provider': 'groq', 'api_key_env': 'GROQ_API_KEY', 'model': 'groq/openai/gpt-oss-20b'}
+        env = {**ENV, 'LLM_ROUTES_JSON': json.dumps([groq, ROUTE]), 'GROQ_API_KEY': 'offline'}
+        for bad in ('Here is the JSON', '', '{"title": "one two three four five six seven eight nine"}'):
+            replies = [AIMessage(content=bad), AIMessage(content='Sure: {"title": "Pilot launch plan"} done')]
+            with patch.dict(os.environ, env, clear=True), patch('backend.core.provider_budget.reserve_attempt', return_value=1), \
+                    patch('backend.core.provider_budget.record_attempt_result') as record, \
+                    patch.object(gateway, '_invoke_route', side_effect=replies) as network, gateway.operation_scope('job-1'):
+                self.assertEqual(summarizer.generate_title('Planning notes'), 'Pilot launch plan')
+            self.assertEqual([call.args[0].alias for call in network.call_args_list], ['groq-a', 'demo-a'])
+            self.assertEqual(record.call_args_list[0].args[1], 'failed')
+
+    def test_meta_reserves_and_requests_its_minimum_output(self):
+        meta = gateway.Route(**{**ROUTE, 'provider': 'meta', 'api_key_env': 'META_API_KEY', 'verified_free': False,
+                                'model': 'meta/muse-spark-1.3', 'input_price_per_million': '1.25',
+                                'output_price_per_million': '4.25'})
+        chat = gateway.GuardedChat([meta, gateway.Route(**ROUTE)], 0.3, 128)
+        self.assertEqual([chat._output_cap(route) for route in chat.routes], [512, 128])
+
+    def test_json_is_recovered_from_fences_and_prose(self):
+        for raw in ('```json\n{"a": 1}\n```', 'Here is the JSON: {"a": 1} Hope it helps', '  {"a": 1}  ', '```\n{"a": 1}\n```'):
+            self.assertEqual(json.loads(gateway.strip_json_fence(raw)), {'a': 1})
+        self.assertEqual(gateway.strip_json_fence('no json here'), 'no json here')
 
     def test_operation_scope_resets_after_exit(self):
         with patch.dict(os.environ, ENV, clear=True):
@@ -487,6 +512,93 @@ class GatewayTests(unittest.TestCase):
                 pass
             with self.assertRaises(RuntimeError):
                 gateway.get_llm().invoke('hello')
+
+    def _task_routes(self):
+        groq = {**ROUTE, 'alias': 'groq-a', 'provider': 'groq', 'api_key_env': 'GROQ_API_KEY', 'model': 'groq/openai/gpt-oss-20b'}
+        flash = {**ROUTE, 'alias': 'gemini-b'}
+        openrouter = {**ROUTE, 'alias': 'or-a', 'provider': 'openrouter', 'api_key_env': 'OPENROUTER_API_KEY',
+                      'model': 'openrouter/nvidia/nemotron-3.5-lightning:free'}
+        nvidia = {**ROUTE, 'alias': 'nv-a', 'provider': 'nvidia_nim', 'api_key_env': 'NVIDIA_API_KEY',
+                  'model': 'nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b'}
+        meta = {**ROUTE, 'alias': 'meta-a', 'provider': 'meta', 'api_key_env': 'META_API_KEY', 'verified_free': False,
+                'model': 'meta/muse-spark-1.3', 'input_price_per_million': '1.25', 'output_price_per_million': '4.25'}
+        routes = [groq, ROUTE, flash, openrouter, nvidia, meta]
+        return {**ENV, 'LLM_ROUTES_JSON': json.dumps(routes), **{r['api_key_env']: 'offline' for r in routes}}
+
+    def test_task_order_prefers_configured_aliases_and_keeps_every_route_as_fallback(self):
+        env = {**self._task_routes(), 'ENABLE_PAID_META': 'true', 'ENABLE_PUBLIC_PAID_FALLBACK': 'true',
+               'ENABLE_NVIDIA_PUBLIC': 'true',
+               'LLM_TASK_ROUTES_JSON': json.dumps({'chat': ['meta-a', 'gemini-b', 'or-a'], 'title': ['nv-a']})}
+        with patch.dict(os.environ, env, clear=True), gateway.operation_scope('public'):
+            # Paid Meta stays last even when a task lists it first; both Gemini models stay in the chain.
+            self.assertEqual([r.alias for r in gateway.get_llm(task='chat').routes],
+                             ['gemini-b', 'or-a', 'groq-a', 'nv-a', 'demo-a', 'meta-a'])
+            self.assertEqual([r.alias for r in gateway.get_llm(task='title').routes],
+                             ['nv-a', 'groq-a', 'or-a', 'demo-a', 'gemini-b', 'meta-a'])
+            self.assertEqual([r.alias for r in gateway.get_llm(task='extract').routes],
+                             ['groq-a', 'nv-a', 'or-a', 'demo-a', 'gemini-b', 'meta-a'])
+            with self.assertRaisesRegex(ValueError, 'Unsupported generation task'):
+                gateway.get_llm(task='poem')
+
+    def test_public_paid_and_nvidia_routes_require_explicit_flags(self):
+        with patch.dict(os.environ, {**self._task_routes(), 'ENABLE_PAID_META': 'true'}, clear=True), \
+                gateway.operation_scope('public'):
+            self.assertEqual([r.provider for r in gateway.get_llm().routes], ['groq', 'openrouter', 'gemini', 'gemini'])
+        with patch.dict(os.environ, {**self._task_routes(), 'ENABLE_PUBLIC_PAID_FALLBACK': 'true'}, clear=True), \
+                gateway.operation_scope('public'):
+            self.assertNotIn('meta', [r.provider for r in gateway.get_llm().routes])
+
+    def test_task_mapping_rejects_unknown_tasks_and_aliases(self):
+        for mapping in ({'poem': ['groq-a']}, {'chat': ['missing']}, {'chat': ['groq-a', 'groq-a']}, ['groq-a']):
+            with patch.dict(os.environ, {**self._task_routes(), 'LLM_TASK_ROUTES_JSON': json.dumps(mapping)}, clear=True), \
+                    gateway.operation_scope('public'):
+                with self.assertRaisesRegex(ValueError, 'LLM_TASK_ROUTES_JSON'):
+                    gateway.get_llm(task='chat')
+
+    def test_gemini_requests_native_json_mode(self):
+        captured = {}
+
+        class FakeRouter:
+            def __init__(self, **_kwargs):
+                pass
+
+            def completion(self, **options):
+                captured.update(options)
+                raise RuntimeError('offline stop')
+
+        route = gateway.Route(**ROUTE)
+        with patch.dict(os.environ, {'GEMINI_API_KEY': 'offline'}, clear=True), \
+                patch.object(gateway.private_litellm(), 'Router', FakeRouter):
+            with self.assertRaisesRegex(RuntimeError, 'offline stop'):
+                gateway._invoke_route(route, [gateway.HumanMessage(content='hi')], 0, 5, 64)
+        self.assertEqual(captured['response_format'], {'type': 'json_object'})
+
+    def test_openrouter_requires_free_model(self):
+        route = {**ROUTE, 'provider': 'openrouter', 'api_key_env': 'OPENROUTER_API_KEY', 'model': 'openrouter/openai/gpt-4o'}
+        with patch.dict(os.environ, {**ENV, 'LLM_ROUTES_JSON': json.dumps([route]), 'OPENROUTER_API_KEY': 'offline'}, clear=True):
+            with self.assertRaisesRegex(ValueError, ':free model'):
+                gateway.get_llm()
+
+    def test_structured_call_accepts_markdown_fenced_json(self):
+        class FakeLLM:
+            def __init__(self, content):
+                self.content = content
+
+            def with_validator(self, validate):
+                self.validate = validate
+                return self
+
+            def invoke(self, _messages):
+                return AIMessage(content=self.content)
+
+        fenced = '```json\n{\n  "title": "Generative AI Overview"\n}\n```'
+        with patch.object(gateway, 'assert_private_runtime'), \
+                patch.object(gateway, 'get_llm', return_value=FakeLLM(fenced)):
+            self.assertEqual(gateway.structured_call('p', 't', summarizer.Title).title, 'Generative AI Overview')
+        with patch.object(gateway, 'assert_private_runtime'), \
+                patch.object(gateway, 'get_llm', return_value=FakeLLM('```json\n{"title": 1}\n```')):
+            with self.assertRaisesRegex(ValueError, 'invalid structured output'):
+                gateway.structured_call('p', 't', summarizer.Title)
 
 
 if __name__ == '__main__':

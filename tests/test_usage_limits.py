@@ -13,7 +13,7 @@ class UsageSettingsTests(unittest.TestCase):
         with patch.dict(os.environ, {'MAX_UPLOAD_MB': ''}, clear=True):
             settings = Settings.from_env()
         self.assertFalse(settings.provider_calls_enabled)
-        self.assertEqual(settings.max_upload_bytes, 10 * 1024 * 1024)
+        self.assertEqual(settings.max_upload_bytes, 25 * 1024 * 1024)
         self.assertEqual(settings.jobs_per_ip_day, 1)
         self.assertEqual(settings.jobs_global_day, 5)
 

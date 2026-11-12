@@ -31,35 +31,56 @@ class AudioProfile:
     audio_seconds_day: int
 
 
-def profile_for_language(language: str) -> AudioProfile:
-    if language not in ('english', 'hinglish'):
-        raise ValueError('Unsupported transcription language')
-    provider = 'groq' if language == 'english' else 'sarvam'
-    require_provider_calls(sarvam=provider == 'sarvam')
+_KEYS = {'groq': 'GROQ_API_KEY', 'sarvam': 'SARVAM_API_KEY', 'gemini': 'GEMINI_API_KEY', 'meta': 'META_API_KEY'}
+MAX_PROFILES = 8
+
+
+def _flag(name: str) -> bool:
+    return os.getenv(name, '').strip().lower() == 'true'
+
+
+def _configured_profiles() -> list[AudioProfile]:
     try:
         profiles = json.loads(os.getenv('STT_PROFILES_JSON', '[]'))
-        if not isinstance(profiles, list) or not profiles or len(profiles) > 2:
+        if not isinstance(profiles, list) or not profiles or len(profiles) > MAX_PROFILES:
             raise ValueError()
-        seen = set()
-        selected = None
+        result, seen = [], set()
         for item in profiles:
             if not isinstance(item, dict) or set(item) != set(AudioProfile.__annotations__):
                 raise ValueError()
             profile = AudioProfile(**item)
-            if (profile.provider not in ('groq', 'sarvam') or profile.provider in seen or
-                profile.keyenv != {'groq': 'GROQ_API_KEY', 'sarvam': 'SARVAM_API_KEY'}[profile.provider] or
+            # Meta is the only paid route and must say so; every other profile is an attested free account.
+            if (profile.provider not in _KEYS or (profile.provider, profile.model) in seen or
+                profile.keyenv != _KEYS[profile.provider] or
                 not isinstance(profile.model, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}', profile.model) or
-                profile.verified_free is not True or any(type(getattr(profile, key)) is not int or getattr(profile, key) <= 0
+                profile.verified_free is not (profile.provider != 'meta') or
+                any(type(getattr(profile, key)) is not int or getattr(profile, key) <= 0
                     for key in ('rpm', 'rpd', 'audio_seconds_hour', 'audio_seconds_day'))):
                 raise ValueError()
-            seen.add(profile.provider)
-            if profile.provider == provider:
-                selected = profile
-        if selected is None or not os.getenv(selected.keyenv, '').strip():
-            raise ValueError()
-        return selected
+            seen.add((profile.provider, profile.model))
+            result.append(profile)
+        return result
     except (TypeError, ValueError, KeyError):
         raise ValueError('Explicit verified-free transcription profile is required') from None
+
+
+def profiles_for_language(language: str, *, owner_paid: bool = False) -> list[AudioProfile]:
+    """Ordered fallback chain: configured order, credentials present, paid Meta last and opt-in only."""
+    if language not in ('english', 'hinglish'):
+        raise ValueError('Unsupported transcription language')
+    require_provider_calls(sarvam=language == 'hinglish')
+    paid_ok = _flag('ENABLE_PAID_META') and (owner_paid or _flag('ENABLE_PUBLIC_PAID_FALLBACK'))
+    chain = [p for p in _configured_profiles()
+             if (p.provider == 'sarvam') == (language == 'hinglish')
+             and os.getenv(p.keyenv, '').strip() and (p.provider != 'meta' or paid_ok)]
+    chain.sort(key=lambda p: p.provider == 'meta')
+    if not chain:
+        raise ValueError('Explicit verified-free transcription profile is required')
+    return chain
+
+
+def profile_for_language(language: str) -> AudioProfile:
+    return profiles_for_language(language)[0]
 
 
 def reserve_audio_attempt(job_id: str, profile: AudioProfile, duration_ms: int) -> int:
@@ -75,7 +96,8 @@ def reserve_audio_attempt(job_id: str, profile: AudioProfile, duration_ms: int) 
             COUNT(*) FILTER (WHERE created_at > clock_timestamp() - INTERVAL '24 hours') AS rpd,
             COALESCE(SUM(duration_ms) FILTER (WHERE created_at > clock_timestamp() - INTERVAL '1 hour'), 0) AS hour_ms,
             COALESCE(SUM(duration_ms), 0) AS day_ms
-            FROM audio_attempts WHERE provider=%s AND created_at > clock_timestamp() - INTERVAL '24 hours' ''', (profile.provider,))
+            FROM audio_attempts WHERE provider=%s AND model=%s AND created_at > clock_timestamp() - INTERVAL '24 hours' ''',
+                    (profile.provider, profile.model))
         used = cur.fetchone()
         if used['rpd'] + 1 > profile.rpd or used['day_ms'] + duration_ms > profile.audio_seconds_day * 1000:
             raise LimitExceeded(86400)

@@ -61,10 +61,10 @@ async function callBackend(method, path, { body, headers, signal, valid } = {}) 
 
 export const getDemoMode = (signal) => callBackend('GET', '/demo-mode', { signal });
 
-export function startJob({ file, inviteCode }) {
+export function startJob({ file, inviteCode, language = 'english' }) {
   const form = new FormData();
   form.append('file', file, file.name);
-  form.append('language', 'english');
+  form.append('language', language === 'hinglish' ? 'hinglish' : 'english');
   form.append('demo_acknowledged', 'true');
   const headers = inviteCode ? { 'X-Demo-Invite': inviteCode } : undefined;
   return callBackend('POST', '/jobs', { body: form, headers });

@@ -44,6 +44,7 @@ export default function App() {
   const [mode, setMode] = useState('loading');
   const [modeAttempt, setModeAttempt] = useState(0);
   const [meta, setMeta] = useState({ language: 'english' });
+  const [languages, setLanguages] = useState(['english']);
   const [phase, setPhase] = useState('processing');
   const [stageIdx, setStageIdx] = useState(-1);
   const [result, setResult] = useState(null);
@@ -77,8 +78,9 @@ export default function App() {
     if (session) return;
     const controller = new AbortController();
     setMode('loading');
-    getDemoMode(controller.signal).then(({ mode: availableMode }) => {
+    getDemoMode(controller.signal).then(({ mode: availableMode, languages: availableLanguages }) => {
       if (controller.signal.aborted) return;
+      setLanguages(Array.isArray(availableLanguages) && availableLanguages.includes('hinglish') ? ['english', 'hinglish'] : ['english']);
       setMode(['sample', 'invited', 'public'].includes(availableMode) ? availableMode : 'unavailable');
     }).catch(() => {
       if (!controller.signal.aborted) setMode('unavailable');
@@ -196,20 +198,20 @@ export default function App() {
     };
   }, [session, phase, deleting, clearSession]);
 
-  const analyse = async ({ file, inviteCode }) => {
+  const analyse = async ({ file, inviteCode, language = 'english' }) => {
     if (writes.current.upload || session || !['invited', 'public'].includes(mode)) return;
     writes.current.upload = true;
     setNotice('');
     setUploadError('');
     setSubmitting(true);
     try {
-      const { job_id: id, job_token: token } = await startJob({ file, inviteCode });
+      const { job_id: id, job_token: token } = await startJob({ file, inviteCode, language });
       if (typeof id !== 'string' || !id || typeof token !== 'string' || !token) {
         throw new Error('The backend did not return a usable session.');
       }
       const created = { id, token };
       saveSession(created);
-      setMeta({ fileName: file.name, fileSize: file.size, language: 'english' });
+      setMeta({ fileName: file.name, fileSize: file.size, language });
       setSession(created);
       setPhase('processing');
       window.scrollTo({ top: 0, behavior: 'instant' });
@@ -229,7 +231,7 @@ export default function App() {
     try {
       const response = await askChat(session, question);
       setChat((messages) => messages.map((message) => message.id === id
-        ? { ...message, a: response.answer, citations: response.citations, model: response.model, retrieval: response.retrieval, pending: false }
+        ? { ...message, a: response.answer, abstained: response.abstained, citations: response.citations, model: response.model, retrieval: response.retrieval, pending: false }
         : message));
     } catch (error) {
       if (expired(error)) clearSession(EXPIRED_NOTICE);
@@ -272,7 +274,7 @@ export default function App() {
 
       <main className="minutes-main">
         {!booting && !session && (
-          <Empty mode={mode} submitting={submitting} onAnalyse={analyse} uploadError={uploadError}
+          <Empty mode={mode} languages={languages} submitting={submitting} onAnalyse={analyse} uploadError={uploadError}
             notice={notice} onRetryAvailability={() => setModeAttempt((attempt) => attempt + 1)} />
         )}
         {!booting && session && (

@@ -297,6 +297,16 @@ def ready():
     return {'status': 'ok'}
 
 
+def _available_languages():
+    languages = ['english']
+    try:
+        profile_for_language('hinglish')  # needs ENABLE_SARVAM, a Sarvam profile and its key
+        languages.append('hinglish')
+    except (ValueError, RuntimeError):
+        pass
+    return languages
+
+
 @app.get('/demo-mode')
 def get_demo_mode():
     try:
@@ -305,7 +315,7 @@ def get_demo_mode():
             require_provider_calls()
             _job_secret()
             if mode != 'invited' or len(os.getenv('DEMO_INVITE_CODE', '').strip()) >= 32:
-                return {'mode': mode}
+                return {'mode': mode, 'languages': _available_languages()}
     except (ValueError, RuntimeError):
         pass
     return {'mode': 'sample'}
@@ -345,8 +355,10 @@ async def create_job(
             handed_off = True
             return {'job_id': job_id, 'job_token': job_capability, 'status': 'queued',
                     'questions': OWNER_EVALUATION_QUESTIONS}
-        if language != 'english' or youtube_url or file is None:
-            raise HTTPException(400, 'Live demo accepts English file uploads only.')
+        if youtube_url or file is None:
+            raise HTTPException(400, 'Live demo accepts file uploads only.')
+        if language not in _available_languages():
+            raise HTTPException(400, 'Hinglish transcription is not available right now.')
         if len(uploads) > 1:
             raise HTTPException(400, 'Provide only one file.')
         try:

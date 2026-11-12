@@ -173,11 +173,24 @@ class APILimitTests(unittest.TestCase):
         self.assertNotIn('missing route', response.text)
         admit.assert_not_called()
 
-    def test_hinglish_is_rejected_before_admission(self):
-        with patch.dict(os.environ, {'ENABLE_SARVAM': 'true'}), patch.object(api.db, 'admit_job') as admit:
+    def test_hinglish_is_rejected_before_admission_when_sarvam_is_unavailable(self):
+        def profile(language):
+            if language == 'hinglish':
+                raise RuntimeError('Sarvam disabled')
+        with patch.object(api, 'profile_for_language', side_effect=profile), patch.object(api.db, 'admit_job') as admit:
             response = self.client.post('/jobs', data={'language': 'hinglish', 'demo_acknowledged': 'true'}, files={'file': ('x.wav', b'abc')})
+            mode = self.client.get('/demo-mode').json()
         self.assertEqual(response.status_code, 400)
         admit.assert_not_called()
+        self.assertEqual(mode['languages'], ['english'])
+
+    def test_hinglish_is_admitted_and_advertised_when_sarvam_is_configured(self):
+        with patch.object(api.db, 'admit_job', side_effect=RuntimeError('stop after admission check')) as admit:
+            response = self.client.post('/jobs', data={'language': 'hinglish', 'demo_acknowledged': 'true'}, files={'file': ('x.wav', b'abc')})
+            mode = self.client.get('/demo-mode').json()
+        self.assertEqual(admit.call_args.args[1], 'hinglish')
+        self.assertNotEqual(response.status_code, 400)
+        self.assertEqual(mode['languages'], ['english', 'hinglish'])
 
     def test_chat_rate_limit_is_429_with_retry_after(self):
         from backend.usage_limits import LimitExceeded

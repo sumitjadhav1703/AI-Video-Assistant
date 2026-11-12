@@ -36,7 +36,7 @@ def _numbered(items: list[str], empty: str) -> str:
 def extract_findings(transcript: str) -> dict[str, str]:
     validate_transcript(transcript)
     result = structured_call(
-        FINDINGS_PROMPT, sanitize_text(transcript), Findings, temperature=0.2)
+        FINDINGS_PROMPT, sanitize_text(transcript), Findings, temperature=0.2, task='extract')
     return {
         'action_items': '\n'.join(f'{i}. Task: {item.task}\n   Owner: {item.owner}\n   Deadline: {item.deadline}'
                                   for i, item in enumerate(result.action_items, 1)) or 'No action items found.',
