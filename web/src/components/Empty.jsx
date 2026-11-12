@@ -35,7 +35,7 @@ const youtubeHintStyle = {
 };
 const noteStyle = { margin: '14px 2px 0', fontFamily: MONO, fontSize: 11, lineHeight: 1.7, color: MUTE };
 
-export default function Empty({ mode, submitting, onAnalyse, onRetryAvailability, uploadError, notice }) {
+export default function Empty({ mode, languages = ['english'], submitting, onAnalyse, onRetryAvailability, uploadError, notice }) {
   const [file, setFile] = useState(null);
   const [inviteCode, setInviteCode] = useState('');
   const [dragOver, setDragOver] = useState(false);
@@ -46,6 +46,8 @@ export default function Empty({ mode, submitting, onAnalyse, onRetryAvailability
   const [demoError, setDemoError] = useState('');
   const [durationSec, setDurationSec] = useState(null);
   const [youtubeHint, setYoutubeHint] = useState(false);
+  const [language, setLanguage] = useState('english');
+  const hinglishReady = languages.includes('hinglish');
   const inputRef = useRef(null);
   const demoRequest = useRef(null);
 
@@ -130,7 +132,8 @@ export default function Empty({ mode, submitting, onAnalyse, onRetryAvailability
   const submit = (event) => {
     event.preventDefault();
     if (!canAnalyse) return;
-    onAnalyse({ file, inviteCode: invited ? inviteCode.trim() : undefined });
+    onAnalyse({ file, inviteCode: invited ? inviteCode.trim() : undefined,
+                language: hinglishReady ? language : 'english' });
     setInviteCode('');
   };
 
@@ -372,7 +375,8 @@ export default function Empty({ mode, submitting, onAnalyse, onRetryAvailability
               <select
                 id="minutes-language"
                 data-hov="1"
-                defaultValue="english"
+                value={hinglishReady ? language : 'english'}
+                onChange={(e) => setLanguage(e.target.value)}
                 disabled={submitting}
                 style={{
                   background: '#0e0e0d',
@@ -388,7 +392,9 @@ export default function Empty({ mode, submitting, onAnalyse, onRetryAvailability
                 }}
               >
                 <option value="english">English</option>
-                <option value="hinglish" disabled>Hinglish (unavailable)</option>
+                <option value="hinglish" disabled={!hinglishReady}>
+                  {hinglishReady ? 'Hinglish / Hindi (translated to English)' : 'Hinglish (unavailable)'}
+                </option>
               </select>
             </div>
             <button

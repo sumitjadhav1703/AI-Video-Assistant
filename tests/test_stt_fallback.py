@@ -124,5 +124,46 @@ class ChunkFallbackTests(unittest.TestCase):
         reserve.assert_called_once()
         self.assertEqual(reserve.call_args.args[2], 120000)
 
+
+class HinglishRouteTests(unittest.TestCase):
+    def setUp(self):
+        directory = self.enterContext(tempfile.TemporaryDirectory())
+        self.path = str(Path(directory) / 'chunk.wav')
+        with wave.open(self.path, 'wb') as handle:
+            handle.setparams((1, 2, 8000, 0, 'NONE', 'not compressed'))
+            handle.writeframes(b'\x00\x00' * 8000 * 30)  # 30 s -> Sarvam pieces of 25 s + 5 s
+        sarvam = dict(provider='sarvam', model='saaras:v3', keyenv='SARVAM_API_KEY', verified_free=True, **LIMITS)
+        self.enterContext(patch.dict(os.environ, {**env(GROQ, GROQ_V3, sarvam), 'ENABLE_SARVAM': 'true',
+                                                  'SARVAM_API_KEY': 'offline'}, clear=True))
+        self.enterContext(operation_scope('job-1'))
+        self.enterContext(patch.object(transcriber, 'metric'))
+        self.reserve = self.enterContext(patch.object(transcriber.audio_budget, 'reserve_audio_attempt'))
+
+    def test_sarvam_translates_with_the_current_speech_to_text_api(self):
+        with patch.object(transcriber.requests, 'post') as post:
+            post.return_value.status_code = 200
+            post.return_value.ok = True
+            post.return_value.json.return_value = {'transcript': 'We will launch on Friday.'}
+            segments = transcriber.transcribe_segments([self.path], 'hinglish')
+        self.assertEqual(post.call_args.args[0], 'https://api.sarvam.ai/speech-to-text')
+        self.assertEqual(post.call_args.kwargs['data'], {'model': 'saaras:v3', 'mode': 'translate', 'language_code': 'unknown'})
+        self.assertEqual([(s['start_ms'], s['end_ms']) for s in segments], [(0, 25000), (25000, 30000)])
+
+    def test_sarvam_failure_falls_back_to_groq_large_v3_translation(self):
+        with patch.object(transcriber, '_sarvam_segments', side_effect=RuntimeError('503')), \
+                patch.object(transcriber, 'Groq') as groq:
+            groq.return_value.audio.translations.create.return_value = {
+                'segments': [{'text': 'We will launch on Friday.', 'start': 0, 'end': 30}]}
+            segments = transcriber.transcribe_segments([self.path], 'hinglish')
+        self.assertEqual(groq.return_value.audio.translations.create.call_args.kwargs['model'], 'whisper-large-v3')
+        self.assertEqual((segments[0]['text'], segments[0]['end_ms']), ('We will launch on Friday.', 30000))
+
+    def test_without_a_translation_model_the_sarvam_error_is_raised(self):
+        with patch.dict(os.environ, {'STT_PROFILES_JSON': json.dumps([GROQ, dict(
+                provider='sarvam', model='saaras:v3', keyenv='SARVAM_API_KEY', verified_free=True, **LIMITS)])}), \
+                patch.object(transcriber, '_sarvam_segments', side_effect=RuntimeError('sarvam down')):
+            with self.assertRaisesRegex(RuntimeError, 'sarvam down'):
+                transcriber.transcribe_segments([self.path], 'hinglish')
+
 if __name__ == '__main__':
     unittest.main()
