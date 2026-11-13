@@ -1,0 +1,255 @@
+metric_id,value
+deepeval.generation.Faithfulness.n_scored,32
+deepeval.generation.Faithfulness.avg_score,1.0
+deepeval.generation.Faithfulness.min_score,1.0
+deepeval.generation.Faithfulness.max_score,1.0
+deepeval.generation.Faithfulness.passed,32
+deepeval.generation.Faithfulness.failed,0
+deepeval.generation.Faithfulness.errors,0
+deepeval.generation.Faithfulness.pass_rate,1.0
+deepeval.generation.Faithfulness.threshold,0.8
+deepeval.generation.Answer Relevancy.n_scored,32
+deepeval.generation.Answer Relevancy.avg_score,0.9520089285714286
+deepeval.generation.Answer Relevancy.min_score,0.0
+deepeval.generation.Answer Relevancy.max_score,1.0
+deepeval.generation.Answer Relevancy.passed,31
+deepeval.generation.Answer Relevancy.failed,1
+deepeval.generation.Answer Relevancy.errors,0
+deepeval.generation.Answer Relevancy.pass_rate,0.96875
+deepeval.generation.Answer Relevancy.threshold,0.7
+deepeval.generation.Contextual Relevancy.n_scored,32
+deepeval.generation.Contextual Relevancy.avg_score,0.28835106819457634
+deepeval.generation.Contextual Relevancy.min_score,0.05263157894736842
+deepeval.generation.Contextual Relevancy.max_score,0.6923076923076923
+deepeval.generation.Contextual Relevancy.passed,7
+deepeval.generation.Contextual Relevancy.failed,25
+deepeval.generation.Contextual Relevancy.errors,0
+deepeval.generation.Contextual Relevancy.pass_rate,0.21875
+deepeval.generation.Contextual Relevancy.threshold,0.5
+deepeval.generation.Contextual Precision.n_scored,32
+deepeval.generation.Contextual Precision.avg_score,0.9401041666666666
+deepeval.generation.Contextual Precision.min_score,0.3333333333333333
+deepeval.generation.Contextual Precision.max_score,1.0
+deepeval.generation.Contextual Precision.passed,29
+deepeval.generation.Contextual Precision.failed,3
+deepeval.generation.Contextual Precision.errors,0
+deepeval.generation.Contextual Precision.pass_rate,0.90625
+deepeval.generation.Contextual Precision.threshold,0.7
+deepeval.generation.Contextual Recall.n_scored,32
+deepeval.generation.Contextual Recall.avg_score,0.9375
+deepeval.generation.Contextual Recall.min_score,0.0
+deepeval.generation.Contextual Recall.max_score,1.0
+deepeval.generation.Contextual Recall.passed,29
+deepeval.generation.Contextual Recall.failed,3
+deepeval.generation.Contextual Recall.errors,0
+deepeval.generation.Contextual Recall.pass_rate,0.90625
+deepeval.generation.Contextual Recall.threshold,0.7
+deterministic.cases_with_result,44
+deterministic.cases_with_error,0
+deterministic.structure_validity,1.0
+deterministic.citations_total,56
+deterministic.citation_validity,1.0
+deterministic.citation_in_context_rate,1.0
+deterministic.citation_exact_quote_rate,1.0
+deterministic.citation_timestamp_in_range_rate,1.0
+deterministic.answered_with_gold_citation_rate,1.0
+deterministic.behavior_accuracy,1.0
+deterministic.behavior_by_category.ambiguous.n,3
+deterministic.behavior_by_category.ambiguous.correct,3
+deterministic.behavior_by_category.ambiguous.accuracy,1.0
+deterministic.behavior_by_category.direct_factual.n,10
+deterministic.behavior_by_category.direct_factual.correct,10
+deterministic.behavior_by_category.direct_factual.accuracy,1.0
+deterministic.behavior_by_category.misleading.n,3
+deterministic.behavior_by_category.misleading.correct,3
+deterministic.behavior_by_category.misleading.accuracy,1.0
+deterministic.behavior_by_category.multi_hop.n,5
+deterministic.behavior_by_category.multi_hop.correct,5
+deterministic.behavior_by_category.multi_hop.accuracy,1.0
+deterministic.behavior_by_category.multi_passage.n,6
+deterministic.behavior_by_category.multi_passage.correct,6
+deterministic.behavior_by_category.multi_passage.accuracy,1.0
+deterministic.behavior_by_category.named_entity.n,5
+deterministic.behavior_by_category.named_entity.correct,5
+deterministic.behavior_by_category.named_entity.accuracy,1.0
+deterministic.behavior_by_category.numerical_date.n,6
+deterministic.behavior_by_category.numerical_date.correct,6
+deterministic.behavior_by_category.numerical_date.accuracy,1.0
+deterministic.behavior_by_category.unanswerable.n,6
+deterministic.behavior_by_category.unanswerable.correct,6
+deterministic.behavior_by_category.unanswerable.accuracy,1.0
+deterministic.abstention.true_abstentions,6
+deterministic.abstention.false_abstentions,0
+deterministic.abstention.missed_abstentions,0
+deterministic.abstention.abstention_precision,1.0
+deterministic.abstention.abstention_recall,1.0
+deterministic.abstention.abstention_f1,1.0
+deterministic.abstention.false_abstention_rate,0.0
+deterministic.adversarial_cases,19
+deterministic.adversarial_pass_rate,1.0
+ir.production_capture.dense_only.n,38
+ir.production_capture.dense_only.hit,0.9736842105263158
+ir.production_capture.dense_only.recall,0.9407894736842105
+ir.production_capture.dense_only.precision,0.4276315789473684
+ir.production_capture.dense_only.mrr,0.9429824561403509
+ir.production_capture.dense_only.ndcg,0.9159493207072597
+ir.production_capture.dense_only.quote_coverage,0.9429824561403509
+ir.production_capture.bm25_only.n,38
+ir.production_capture.bm25_only.hit,0.9473684210526315
+ir.production_capture.bm25_only.recall,0.8289473684210527
+ir.production_capture.bm25_only.precision,0.3618421052631579
+ir.production_capture.bm25_only.mrr,0.9078947368421053
+ir.production_capture.bm25_only.ndcg,0.8203641350671032
+ir.production_capture.bm25_only.quote_coverage,0.8947368421052632
+ir.production_capture.hybrid_rrf.n,38
+ir.production_capture.hybrid_rrf.hit,1.0
+ir.production_capture.hybrid_rrf.recall,0.9035087719298246
+ir.production_capture.hybrid_rrf.precision,0.39473684210526316
+ir.production_capture.hybrid_rrf.mrr,0.9429824561403509
+ir.production_capture.hybrid_rrf.ndcg,0.884452644172028
+ir.production_capture.hybrid_rrf.quote_coverage,0.9342105263157895
+ir.production_capture.hybrid_rerank.n,38
+ir.production_capture.hybrid_rerank.hit,1.0
+ir.production_capture.hybrid_rerank.recall,0.9144736842105263
+ir.production_capture.hybrid_rerank.precision,0.40131578947368424
+ir.production_capture.hybrid_rerank.mrr,0.9364035087719299
+ir.production_capture.hybrid_rerank.ndcg,0.8864639020101265
+ir.production_capture.hybrid_rerank.quote_coverage,0.9539473684210527
+ir.production_capture.hybrid_rerank_top5.n,38
+ir.production_capture.hybrid_rerank_top5.hit,1.0
+ir.production_capture.hybrid_rerank_top5.recall,0.9364035087719299
+ir.production_capture.hybrid_rerank_top5.precision,0.3315789473684211
+ir.production_capture.hybrid_rerank_top5.mrr,0.9364035087719299
+ir.production_capture.hybrid_rerank_top5.ndcg,0.8974833626760909
+ir.production_capture.hybrid_rerank_top5.quote_coverage,0.9714912280701755
+ir.production_capture.rrf_rerank_blend.n,38
+ir.production_capture.rrf_rerank_blend.hit,1.0
+ir.production_capture.rrf_rerank_blend.recall,0.9166666666666667
+ir.production_capture.rrf_rerank_blend.precision,0.40131578947368424
+ir.production_capture.rrf_rerank_blend.mrr,0.9517543859649124
+ir.production_capture.rrf_rerank_blend.ndcg,0.8938810189402835
+ir.production_capture.rrf_rerank_blend.quote_coverage,0.9407894736842105
+ir.offline.bm25_only.n,39
+ir.offline.bm25_only.hit,0.9487179487179487
+ir.offline.bm25_only.recall,0.8333333333333334
+ir.offline.bm25_only.precision,0.358974358974359
+ir.offline.bm25_only.mrr,0.9102564102564102
+ir.offline.bm25_only.ndcg,0.8249701828858954
+ir.offline.bm25_only.quote_coverage,0.8974358974358975
+ir.offline.bm25_rerank.n,39
+ir.offline.bm25_rerank.hit,1.0
+ir.offline.bm25_rerank.recall,0.9038461538461539
+ir.offline.bm25_rerank.precision,0.391025641025641
+ir.offline.bm25_rerank.mrr,0.9380341880341881
+ir.offline.bm25_rerank.ndcg,0.879455781260263
+ir.offline.bm25_rerank.quote_coverage,0.9487179487179487
+latency.cases,44
+latency.cold_cases,1
+latency.warm.dense_retrieval.n,43
+latency.warm.dense_retrieval.p50,8.0
+latency.warm.dense_retrieval.p95,17.799999999999997
+latency.warm.dense_retrieval.p99,30.119999999999976
+latency.warm.dense_retrieval.mean,9.790697674418604
+latency.warm.dense_retrieval.max,36
+latency.warm.sparse_retrieval.n,43
+latency.warm.sparse_retrieval.p50,1.0
+latency.warm.sparse_retrieval.p95,1.0
+latency.warm.sparse_retrieval.p99,1.0
+latency.warm.sparse_retrieval.mean,1.0
+latency.warm.sparse_retrieval.max,1
+latency.warm.rrf.n,43
+latency.warm.rrf.p50,0.0
+latency.warm.rrf.p95,0.0
+latency.warm.rrf.p99,0.0
+latency.warm.rrf.mean,0.0
+latency.warm.rrf.max,0
+latency.warm.rerank.n,43
+latency.warm.rerank.p50,8.0
+latency.warm.rerank.p95,14.899999999999999
+latency.warm.rerank.p99,55.7999999999999
+latency.warm.rerank.mean,10.069767441860465
+latency.warm.rerank.max,81
+latency.warm.generation.n,43
+latency.warm.generation.p50,2189.0
+latency.warm.generation.p95,6702.599999999999
+latency.warm.generation.p99,12372.259999999995
+latency.warm.generation.mean,3126.6511627906975
+latency.warm.generation.max,13547
+latency.warm.end_to_end.n,43
+latency.warm.end_to_end.p50,2286.0
+latency.warm.end_to_end.p95,6781.599999999999
+latency.warm.end_to_end.p99,12446.479999999996
+latency.warm.end_to_end.mean,3205.8837209302324
+latency.warm.end_to_end.max,13625
+latency.all.dense_retrieval.n,44
+latency.all.dense_retrieval.p50,8.0
+latency.all.dense_retrieval.p95,17.700000000000003
+latency.all.dense_retrieval.p99,29.980000000000004
+latency.all.dense_retrieval.mean,9.772727272727273
+latency.all.dense_retrieval.max,36
+latency.all.sparse_retrieval.n,44
+latency.all.sparse_retrieval.p50,1.0
+latency.all.sparse_retrieval.p95,1.0
+latency.all.sparse_retrieval.p99,1.0
+latency.all.sparse_retrieval.mean,1.0
+latency.all.sparse_retrieval.max,1
+latency.all.rrf.n,44
+latency.all.rrf.p50,0.0
+latency.all.rrf.p95,0.0
+latency.all.rrf.p99,0.0
+latency.all.rrf.mean,0.0
+latency.all.rrf.max,0
+latency.all.rerank.n,44
+latency.all.rerank.p50,8.0
+latency.all.rerank.p95,14.850000000000001
+latency.all.rerank.p99,55.20000000000002
+latency.all.rerank.mean,10.045454545454545
+latency.all.rerank.max,81
+latency.all.generation.n,44
+latency.all.generation.p50,2174.0
+latency.all.generation.p95,6690.400000000001
+latency.all.generation.p99,12344.29
+latency.all.generation.mean,3089.590909090909
+latency.all.generation.max,13547
+latency.all.end_to_end.n,44
+latency.all.end_to_end.p50,2275.5
+latency.all.end_to_end.p95,6770.400000000001
+latency.all.end_to_end.p99,12418.42
+latency.all.end_to_end.mean,3168.9772727272725
+latency.all.end_to_end.max,13625
+latency.candidates.dense_count.n,44
+latency.candidates.dense_count.p50,10.0
+latency.candidates.dense_count.p95,10.0
+latency.candidates.dense_count.p99,10.0
+latency.candidates.dense_count.mean,10.0
+latency.candidates.dense_count.max,10
+latency.candidates.sparse_count.n,44
+latency.candidates.sparse_count.p50,10.0
+latency.candidates.sparse_count.p95,10.0
+latency.candidates.sparse_count.p99,10.0
+latency.candidates.sparse_count.mean,10.0
+latency.candidates.sparse_count.max,10
+latency.candidates.fused_count.n,44
+latency.candidates.fused_count.p50,12.0
+latency.candidates.fused_count.p95,12.0
+latency.candidates.fused_count.p99,12.0
+latency.candidates.fused_count.mean,11.909090909090908
+latency.candidates.fused_count.max,12
+latency.candidates.final_count.n,44
+latency.candidates.final_count.p50,4.0
+latency.candidates.final_count.p95,4.0
+latency.candidates.final_count.p99,4.0
+latency.candidates.final_count.mean,4.0
+latency.candidates.final_count.max,4
+latency.provider_calls.total_attempts,44
+latency.provider_calls.failed_attempts,0
+latency.provider_calls.questions_with_retry,0
+latency.provider_calls.per_question.n,44
+latency.provider_calls.per_question.p50,1.0
+latency.provider_calls.per_question.p95,1.0
+latency.provider_calls.per_question.p99,1.0
+latency.provider_calls.per_question.mean,1.0
+latency.provider_calls.per_question.max,1
+latency.provider_calls.provider_responses_by_model.nvidia_nim:nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b,44
+latency.provider_calls.outputs_rejected_by_app,0
+latency.provider_calls.final_answers_by_model.nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b,44

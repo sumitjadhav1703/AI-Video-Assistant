@@ -80,10 +80,22 @@ class EmbeddingFailoverTests(unittest.TestCase):
                         embedding_routes.embed_batch(route, ['Private.'])
         reserve.assert_not_called()
 
-    def test_explicit_route_list_requires_free_entitlement_and_fixed_order(self):
+    def test_openrouter_private_model_name_is_the_same_model_but_others_are_rejected(self):
+        route = embedding_routes.EmbeddingRoute('openrouter-nemotron', 1, 1, 1)
+        payload = lambda model: {'model': model, 'data': [{'index': 0, 'embedding': [1.0] + [0.0] * 2047}]}
+        self.assertEqual(len(embedding_routes._vectors(route, payload('private/openrouter/nvidia/nemotron-3-embed-1b'), 1)[0]), 2048)
+        self.assertEqual(len(embedding_routes._vectors(route, payload('nvidia/nemotron-3-embed-1b:free'), 1)[0]), 2048)
+        for other in ('private/openrouter/nvidia/nemotron-3.5-embed-8b', 'openai/text-embedding-3-small', None):
+            with self.subTest(other=other), self.assertRaises((ValueError, KeyError, TypeError)):
+                embedding_routes._vectors(route, payload(other), 1)
+
+    def test_explicit_route_list_requires_free_entitlement_and_unique_routes(self):
         primary = route_config('openrouter-nemotron')
         fallback = route_config('gemini-embeddings')
-        for invalid in ([fallback, primary], [primary, primary],
+        with patch.dict(os.environ, {'EMBEDDING_ROUTES_JSON': json.dumps([fallback, primary])}):
+            self.assertEqual([r.alias for r in embedding_routes.configured_embedding_routes()],
+                             ['gemini-embeddings', 'openrouter-nemotron'])  # configured order is the failover order
+        for invalid in ([primary, primary],
                         [{**primary, 'verified_free': False}], [{**primary, 'rpm': True}],
                         [{**primary, 'model': 'unreviewed-model'}]):
             with self.subTest(invalid=invalid), patch.dict(os.environ, {'EMBEDDING_ROUTES_JSON': json.dumps(invalid)}), \

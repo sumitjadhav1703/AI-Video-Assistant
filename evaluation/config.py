@@ -58,7 +58,7 @@ DEFAULT_BUDGET_USD = 10.0
 
 # Hosts the local mode may reach; everything else (Confident AI, PostHog, ...) is refused.
 APP_PROVIDER_HOSTS = ('generativelanguage.googleapis.com', 'api.groq.com', 'openrouter.ai',
-                      'integrate.api.nvidia.com')
+                      'integrate.api.nvidia.com', 'api.cloudflare.com')
 JUDGE_HOSTS = ('api.meta.ai',)
 LOOPBACK_HOSTS = ('localhost', '127.0.0.1', '::1')
 

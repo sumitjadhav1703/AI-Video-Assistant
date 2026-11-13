@@ -1,0 +1,525 @@
+{
+  "meta": {
+    "generated_at": "2026-11-13T14:25:38+00:00",
+    "mode": "local",
+    "mode_description": "local execution, remote inference",
+    "deepeval_version": "4.3.4",
+    "dataset_size": 45,
+    "source_id": "nasa-cop26-stgermain",
+    "judge_model": "meta/muse-spark-1.3",
+    "generator_models_observed": [
+      "nvidia_nim:nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b"
+    ],
+    "answers_captured": 44,
+    "stages_run": {
+      "answer": true,
+      "judge": [
+        "generation"
+      ],
+      "offline": true
+    },
+    "judge_spend_usd": 7.631226,
+    "thresholds": {
+      "Faithfulness": 0.8,
+      "Answer Relevancy": 0.7,
+      "Contextual Precision": 0.7,
+      "Contextual Recall": 0.7,
+      "Contextual Relevancy": 0.5
+    },
+    "runs": [
+      {
+        "stage": "index",
+        "status": "indexed",
+        "chunks": 28,
+        "embedding_route": "openrouter-nemotron",
+        "embedding_model": "nvidia/nemotron-3-embed-1b:free",
+        "embedding_dimension": 2048,
+        "elapsed_ms": 3624,
+        "stages": [],
+        "at": "2026-11-13T13:56:24+00:00"
+      },
+      {
+        "stage": "answer",
+        "scope": "owner",
+        "git_sha": "7c9e3f0",
+        "started": "2026-11-13T13:56:25+00:00",
+        "warmup_ms": 1316,
+        "cases": [
+          "NASA-F-001",
+          "NASA-F-002",
+          "NASA-F-003",
+          "NASA-F-004",
+          "NASA-F-005",
+          "NASA-F-006",
+          "NASA-F-007",
+          "NASA-F-008",
+          "NASA-F-009",
+          "NASA-F-010",
+          "NASA-N-001",
+          "NASA-N-002",
+          "NASA-N-003",
+          "NASA-N-004",
+          "NASA-N-005",
+          "NASA-N-006",
+          "NASA-E-001",
+          "NASA-E-002",
+          "NASA-E-003",
+          "NASA-E-004",
+          "NASA-E-005",
+          "NASA-M-001",
+          "NASA-M-002",
+          "NASA-M-003",
+          "NASA-M-004",
+          "NASA-M-005",
+          "NASA-M-006",
+          "NASA-H-001",
+          "NASA-H-002",
+          "NASA-H-003",
+          "NASA-H-004",
+          "NASA-H-005",
+          "NASA-U-001",
+          "NASA-U-002",
+          "NASA-U-003",
+          "NASA-U-004",
+          "NASA-U-005",
+          "NASA-U-006",
+          "NASA-A-001",
+          "NASA-A-002",
+          "NASA-A-003",
+          "NASA-P-001",
+          "NASA-P-002",
+          "NASA-P-003",
+          "NASA-P-004"
+        ],
+        "pinned_chat_route": "nvidia-nemotron",
+        "run_tag": "v2",
+        "embedding": {
+          "route": "openrouter-nemotron",
+          "model": "nvidia/nemotron-3-embed-1b:free",
+          "prefetched": 45,
+          "batch_requests": [
+            {
+              "texts": 16,
+              "elapsed_ms": 1212
+            },
+            {
+              "texts": 16,
+              "elapsed_ms": 1192
+            },
+            {
+              "texts": 13,
+              "elapsed_ms": 1055
+            }
+          ],
+          "cache": {
+            "hits": 60,
+            "misses": 0
+          }
+        },
+        "stopped_early": {
+          "type": "RouteQuotaExceeded",
+          "message": "Demo usage limit reached. Please try again later.",
+          "id": "NASA-P-004",
+          "calls": [],
+          "waits": 3
+        },
+        "finished": "2026-11-13T14:15:14+00:00"
+      },
+      {
+        "stage": "judge",
+        "pilot": null,
+        "cases": 31,
+        "ledger": {
+          "run_id": "20261113T141558Z",
+          "budget_usd": 2.7,
+          "spent_usd": 1.878458,
+          "calls": 494,
+          "input_tokens": 227634,
+          "output_tokens": 375039
+        },
+        "judge_latency_ms": {
+          "calls": 494
+        }
+      },
+      {
+        "stage": "judge",
+        "pilot": null,
+        "cases": 32,
+        "ledger": {
+          "run_id": "20261113T142454Z",
+          "budget_usd": 0.5,
+          "spent_usd": 0.144063,
+          "calls": 32,
+          "input_tokens": 15552,
+          "output_tokens": 29323
+        },
+        "judge_latency_ms": {
+          "calls": 32
+        }
+      }
+    ]
+  },
+  "deepeval": {
+    "generation": {
+      "Faithfulness": {
+        "n_scored": 32,
+        "avg_score": 1.0,
+        "min_score": 1.0,
+        "max_score": 1.0,
+        "passed": 32,
+        "failed": 0,
+        "errors": 0,
+        "pass_rate": 1.0,
+        "threshold": 0.8
+      },
+      "Answer Relevancy": {
+        "n_scored": 32,
+        "avg_score": 0.9520089285714286,
+        "min_score": 0.0,
+        "max_score": 1.0,
+        "passed": 31,
+        "failed": 1,
+        "errors": 0,
+        "pass_rate": 0.96875,
+        "threshold": 0.7
+      },
+      "Contextual Relevancy": {
+        "n_scored": 32,
+        "avg_score": 0.28835106819457634,
+        "min_score": 0.05263157894736842,
+        "max_score": 0.6923076923076923,
+        "passed": 7,
+        "failed": 25,
+        "errors": 0,
+        "pass_rate": 0.21875,
+        "threshold": 0.5
+      },
+      "Contextual Precision": {
+        "n_scored": 32,
+        "avg_score": 0.9401041666666666,
+        "min_score": 0.3333333333333333,
+        "max_score": 1.0,
+        "passed": 29,
+        "failed": 3,
+        "errors": 0,
+        "pass_rate": 0.90625,
+        "threshold": 0.7
+      },
+      "Contextual Recall": {
+        "n_scored": 32,
+        "avg_score": 0.9375,
+        "min_score": 0.0,
+        "max_score": 1.0,
+        "passed": 29,
+        "failed": 3,
+        "errors": 0,
+        "pass_rate": 0.90625,
+        "threshold": 0.7
+      }
+    }
+  },
+  "deterministic": {
+    "cases_with_result": 44,
+    "cases_with_error": 0,
+    "structure_validity": 1.0,
+    "citations_total": 56,
+    "citation_validity": 1.0,
+    "citation_in_context_rate": 1.0,
+    "citation_exact_quote_rate": 1.0,
+    "citation_timestamp_in_range_rate": 1.0,
+    "answered_with_gold_citation_rate": 1.0,
+    "behavior_accuracy": 1.0,
+    "behavior_by_category": {
+      "ambiguous": {
+        "n": 3,
+        "correct": 3,
+        "accuracy": 1.0
+      },
+      "direct_factual": {
+        "n": 10,
+        "correct": 10,
+        "accuracy": 1.0
+      },
+      "misleading": {
+        "n": 3,
+        "correct": 3,
+        "accuracy": 1.0
+      },
+      "multi_hop": {
+        "n": 5,
+        "correct": 5,
+        "accuracy": 1.0
+      },
+      "multi_passage": {
+        "n": 6,
+        "correct": 6,
+        "accuracy": 1.0
+      },
+      "named_entity": {
+        "n": 5,
+        "correct": 5,
+        "accuracy": 1.0
+      },
+      "numerical_date": {
+        "n": 6,
+        "correct": 6,
+        "accuracy": 1.0
+      },
+      "unanswerable": {
+        "n": 6,
+        "correct": 6,
+        "accuracy": 1.0
+      }
+    },
+    "abstention": {
+      "true_abstentions": 6,
+      "false_abstentions": 0,
+      "missed_abstentions": 0,
+      "abstention_precision": 1.0,
+      "abstention_recall": 1.0,
+      "abstention_f1": 1.0,
+      "false_abstention_rate": 0.0
+    },
+    "adversarial_cases": 19,
+    "adversarial_pass_rate": 1.0
+  },
+  "ir": {
+    "production_capture": {
+      "dense_only": {
+        "n": 38,
+        "hit": 0.9736842105263158,
+        "recall": 0.9407894736842105,
+        "precision": 0.4276315789473684,
+        "mrr": 0.9429824561403509,
+        "ndcg": 0.9159493207072597,
+        "quote_coverage": 0.9429824561403509
+      },
+      "bm25_only": {
+        "n": 38,
+        "hit": 0.9473684210526315,
+        "recall": 0.8289473684210527,
+        "precision": 0.3618421052631579,
+        "mrr": 0.9078947368421053,
+        "ndcg": 0.8203641350671032,
+        "quote_coverage": 0.8947368421052632
+      },
+      "hybrid_rrf": {
+        "n": 38,
+        "hit": 1.0,
+        "recall": 0.9035087719298246,
+        "precision": 0.39473684210526316,
+        "mrr": 0.9429824561403509,
+        "ndcg": 0.884452644172028,
+        "quote_coverage": 0.9342105263157895
+      },
+      "hybrid_rerank": {
+        "n": 38,
+        "hit": 1.0,
+        "recall": 0.9144736842105263,
+        "precision": 0.40131578947368424,
+        "mrr": 0.9364035087719299,
+        "ndcg": 0.8864639020101265,
+        "quote_coverage": 0.9539473684210527
+      },
+      "hybrid_rerank_top5": {
+        "n": 38,
+        "hit": 1.0,
+        "recall": 0.9364035087719299,
+        "precision": 0.3315789473684211,
+        "mrr": 0.9364035087719299,
+        "ndcg": 0.8974833626760909,
+        "quote_coverage": 0.9714912280701755
+      },
+      "rrf_rerank_blend": {
+        "n": 38,
+        "hit": 1.0,
+        "recall": 0.9166666666666667,
+        "precision": 0.40131578947368424,
+        "mrr": 0.9517543859649124,
+        "ndcg": 0.8938810189402835,
+        "quote_coverage": 0.9407894736842105
+      }
+    },
+    "offline": {
+      "bm25_only": {
+        "n": 39,
+        "hit": 0.9487179487179487,
+        "recall": 0.8333333333333334,
+        "precision": 0.358974358974359,
+        "mrr": 0.9102564102564102,
+        "ndcg": 0.8249701828858954,
+        "quote_coverage": 0.8974358974358975
+      },
+      "bm25_rerank": {
+        "n": 39,
+        "hit": 1.0,
+        "recall": 0.9038461538461539,
+        "precision": 0.391025641025641,
+        "mrr": 0.9380341880341881,
+        "ndcg": 0.879455781260263,
+        "quote_coverage": 0.9487179487179487
+      }
+    }
+  },
+  "latency": {
+    "note": "Query embeddings were fetched in one batched request and served from cache, so dense_retrieval measures the pgvector search only. Cold = first measured question of a run (excluded from warm stats).",
+    "cases": 44,
+    "cold_cases": 1,
+    "warm": {
+      "dense_retrieval": {
+        "n": 43,
+        "p50": 8.0,
+        "p95": 17.799999999999997,
+        "p99": 30.119999999999976,
+        "mean": 9.790697674418604,
+        "max": 36
+      },
+      "sparse_retrieval": {
+        "n": 43,
+        "p50": 1.0,
+        "p95": 1.0,
+        "p99": 1.0,
+        "mean": 1.0,
+        "max": 1
+      },
+      "rrf": {
+        "n": 43,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "mean": 0.0,
+        "max": 0
+      },
+      "rerank": {
+        "n": 43,
+        "p50": 8.0,
+        "p95": 14.899999999999999,
+        "p99": 55.7999999999999,
+        "mean": 10.069767441860465,
+        "max": 81
+      },
+      "generation": {
+        "n": 43,
+        "p50": 2189.0,
+        "p95": 6702.599999999999,
+        "p99": 12372.259999999995,
+        "mean": 3126.6511627906975,
+        "max": 13547
+      },
+      "end_to_end": {
+        "n": 43,
+        "p50": 2286.0,
+        "p95": 6781.599999999999,
+        "p99": 12446.479999999996,
+        "mean": 3205.8837209302324,
+        "max": 13625
+      }
+    },
+    "all": {
+      "dense_retrieval": {
+        "n": 44,
+        "p50": 8.0,
+        "p95": 17.700000000000003,
+        "p99": 29.980000000000004,
+        "mean": 9.772727272727273,
+        "max": 36
+      },
+      "sparse_retrieval": {
+        "n": 44,
+        "p50": 1.0,
+        "p95": 1.0,
+        "p99": 1.0,
+        "mean": 1.0,
+        "max": 1
+      },
+      "rrf": {
+        "n": 44,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "mean": 0.0,
+        "max": 0
+      },
+      "rerank": {
+        "n": 44,
+        "p50": 8.0,
+        "p95": 14.850000000000001,
+        "p99": 55.20000000000002,
+        "mean": 10.045454545454545,
+        "max": 81
+      },
+      "generation": {
+        "n": 44,
+        "p50": 2174.0,
+        "p95": 6690.400000000001,
+        "p99": 12344.29,
+        "mean": 3089.590909090909,
+        "max": 13547
+      },
+      "end_to_end": {
+        "n": 44,
+        "p50": 2275.5,
+        "p95": 6770.400000000001,
+        "p99": 12418.42,
+        "mean": 3168.9772727272725,
+        "max": 13625
+      }
+    },
+    "candidates": {
+      "dense_count": {
+        "n": 44,
+        "p50": 10.0,
+        "p95": 10.0,
+        "p99": 10.0,
+        "mean": 10.0,
+        "max": 10
+      },
+      "sparse_count": {
+        "n": 44,
+        "p50": 10.0,
+        "p95": 10.0,
+        "p99": 10.0,
+        "mean": 10.0,
+        "max": 10
+      },
+      "fused_count": {
+        "n": 44,
+        "p50": 12.0,
+        "p95": 12.0,
+        "p99": 12.0,
+        "mean": 11.909090909090908,
+        "max": 12
+      },
+      "final_count": {
+        "n": 44,
+        "p50": 4.0,
+        "p95": 4.0,
+        "p99": 4.0,
+        "mean": 4.0,
+        "max": 4
+      }
+    },
+    "provider_calls": {
+      "total_attempts": 44,
+      "failed_attempts": 0,
+      "questions_with_retry": 0,
+      "per_question": {
+        "n": 44,
+        "p50": 1.0,
+        "p95": 1.0,
+        "p99": 1.0,
+        "mean": 1.0,
+        "max": 1
+      },
+      "failures_by_type": {},
+      "provider_responses_by_model": {
+        "nvidia_nim:nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b": 44
+      },
+      "outputs_rejected_by_app": 0,
+      "final_answers_by_model": {
+        "nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b": 44
+      }
+    },
+    "request_errors": {}
+  }
+}

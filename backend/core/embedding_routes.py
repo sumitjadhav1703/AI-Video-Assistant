@@ -123,8 +123,8 @@ def configured_embedding_routes() -> tuple[EmbeddingRoute, ...]:
             if any(type(limit) is not int or limit <= 0 for limit in limits):
                 raise ValueError()
             routes.append(EmbeddingRoute(alias, *limits))
-        aliases = {route.alias for route in routes}
-        if [route.alias for route in routes] != [alias for alias in EMBEDDING_SPACES if alias in aliases]:
+        # The configured order is the failover order; each route may appear once.
+        if len({route.alias for route in routes}) != len(routes):
             raise ValueError()
     except (ValueError, RecursionError):
         raise ValueError('Invalid embedding route configuration') from None
@@ -199,6 +199,13 @@ def _request(route, texts, query):
     return 'https://integrate.api.nvidia.com/v1/embeddings', headers, body
 
 
+def _base_model(name):
+    """OpenRouter answers ':free' requests as 'private/openrouter/<model>'; any other model is still a mismatch."""
+    if not isinstance(name, str):
+        return None
+    return name.removeprefix('private/openrouter/').removesuffix(':free')
+
+
 def _vectors(route, payload, count):
     if not isinstance(payload, dict) or payload.get('error'):
         raise ValueError('Invalid embedding response')
@@ -212,7 +219,7 @@ def _vectors(route, payload, count):
         if result.get('shape', [count, route.dimension]) != [count, route.dimension]:
             raise ValueError('Invalid embedding response shape')
     else:
-        if payload['model'] != route.model:
+        if _base_model(payload['model']) != _base_model(route.model):
             raise ValueError('Embedding response model mismatch')
         indexed = {}
         for entry in payload['data']:
