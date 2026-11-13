@@ -16,6 +16,8 @@ AI Video Assistant transcribes uploaded clips, extracts findings, and answers qu
 
 Minutes opens at `/`. Upload an English clip or pick a bundled demo video. Results show chat beside the summary and findings on desktop, chat first on mobile, and a collapsed transcript below. Links above the upload area open `/eval` (every evaluation run, with a per-question explorer), `/usage` (today's remaining allowance, models and measured tokens) and `/pipeline` (an animated walk-through of processing and chat). Live analysis supports invited and public access and is disabled in sample mode. See the [recruiter demo guide](docs/RECRUITER_DEMO.md) for configuration, verification, and release gates.
 
+For the engineering decisions, bottlenecks, experiments and measured results behind the project, read the [engineering story](docs/engineering-story/README.md).
+
 For handoff, open `~/Projects/AI-Video-Assistant` and start with [AGENTS.md](AGENTS.md). [PR #4](https://github.com/sumitjadhav1703/AI-Video-Assistant/pull/4) tracks the pending release from `ci/sample-stack`.
 
 ## Local hybrid retrieval upgrade
