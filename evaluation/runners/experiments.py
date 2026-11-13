@@ -24,7 +24,8 @@ BASELINE = 'hybrid_rerank'
 
 
 def _scored_cases(cases):
-    return [c for c in cases if c['golden'].get('gold_chunk_ids') and c.get('contexts')]
+    # Cases whose request failed have no captured retrieval; they are excluded, not scored as misses.
+    return [c for c in cases if c['golden'].get('gold_chunk_ids') and c.get('contexts') and c.get('result', True) is not None]
 
 
 def ir_table(cases, k=config.FINAL_K, variants=VARIANTS):

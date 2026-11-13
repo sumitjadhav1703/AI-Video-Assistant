@@ -23,13 +23,20 @@ def extract(result):
     return rows
 
 
-def judge_stage(cases, stage, judge, *, max_concurrent=2):
+def judge_stage(cases, stage, judge, *, max_concurrent=2, skip=()):
     test_cases = [tc for c in cases if deepeval_suite.eligible(c)
-                  for tc in [deepeval_suite.build_test_case(c, stage)] if tc is not None]
+                  for tc in [deepeval_suite.build_test_case(c, stage)] if tc is not None and tc.name not in skip]
     if not test_cases:
         return []
     metrics = deepeval_suite.build_metrics(judge, deepeval_suite.stage_metric_names(stage))
-    return extract(evaluate(test_cases=test_cases, metrics=metrics, **_configs(max_concurrent)))
+    rows = extract(evaluate(test_cases=test_cases, metrics=metrics, **_configs(max_concurrent)))
+    # DeepEval can drop cases (e.g. a cancelled gather) without raising; never let them vanish.
+    returned = {r['name'] for r in rows}
+    rows += [{'name': tc.name, 'success': False, 'missing': True, 'metrics': [
+        {'name': m.__name__, 'score': None, 'success': False, 'threshold': m.threshold, 'reason': None,
+         'error': 'not returned by DeepEval', 'evaluation_model': judge.get_model_name()} for m in metrics]}
+        for tc in test_cases if tc.name not in returned]
+    return rows
 
 
 def judge_sanity(judge, *, max_concurrent=2):

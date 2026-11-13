@@ -151,6 +151,20 @@ class MetricConfigTests(unittest.TestCase):
             self.assertTrue(m.include_reason)
             self.assertEqual(str(getattr(m.eval_mode, 'value', m.eval_mode)), 'llm')
 
+    def test_cases_dropped_by_deepeval_are_recorded_not_lost(self):
+        from evaluation.runners import judge_runner
+        meta = judge.MetaJudge(judge.SpendLedger(1, path=Path(tempfile.mkdtemp()) / 'l.json'), client=fake_client())
+        one = SimpleNamespace(test_results=[SimpleNamespace(name='NASA-F-001:generation', success=True, metrics_data=[])])
+        cases = [captured_case('NASA-F-001'), captured_case('NASA-F-002')]
+        with patch.object(judge_runner, 'evaluate', return_value=one):
+            rows = judge_runner.judge_stage(cases, 'generation', meta)
+        missing = [r for r in rows if r.get('missing')]
+        self.assertEqual([r['name'] for r in missing], ['NASA-F-002:generation'])
+        self.assertTrue(all(m['error'] for m in missing[0]['metrics']))
+        with patch.object(judge_runner, 'evaluate', return_value=one) as called:
+            judge_runner.judge_stage(cases, 'generation', meta, skip={'NASA-F-001:generation'})
+        self.assertEqual([tc.name for tc in called.call_args.kwargs['test_cases']], ['NASA-F-002:generation'])
+
     def test_retrieval_stage_uses_contextual_metrics_only(self):
         self.assertEqual(deepeval_suite.stage_metric_names('retrieval_pre_rerank'), config.RETRIEVAL_METRICS)
 
@@ -185,6 +199,32 @@ class ContextCaptureTests(unittest.TestCase):
         self.assertIsNone(case['result'])
         self.assertEqual(case['error']['type'], 'RuntimeError')
         self.assertEqual(case['contexts']['final'], [])
+
+    def test_per_minute_cap_waits_then_retries_and_stops_when_still_capped(self):
+        capped = {**captured_case(), 'result': None, 'calls': [],
+                  'error': {'type': 'RuntimeError', 'message': 'No eligible generation route'}}
+        tmp = Path(tempfile.mkdtemp())
+        sleeps = []
+        common = dict(scope='owner', out_dir=tmp / 'a', cache_path=tmp / 'c.json', progress=lambda _: None,
+                      rate_waits=2, rate_wait_seconds=65, sleep=sleeps.append)
+        with patch.object(adapter, 'verify_index', return_value=DOCUMENTS), patch.object(adapter, 'warm_up', return_value=0), \
+                patch('backend.core.vector_store.get_embeddings'), patch('backend.db.get_job', return_value={'embedding_route': 'x'}), \
+                patch.object(adapter.QueryEmbeddingCache, 'prefetch', return_value=0), \
+                patch('backend.core.llm_gateway.operation_scope'), patch.object(adapter, 'per_question_job_budget'):
+            with patch.object(adapter, 'answer_one', side_effect=[capped, captured_case()]):
+                run = adapter.answer_all([BY_ID['NASA-F-001']], **common)
+            self.assertIsNone(run['stopped_early'])
+            self.assertEqual(sleeps, [65])
+            with patch.object(adapter, 'answer_one', return_value=capped):
+                run = adapter.answer_all([BY_ID['NASA-F-002']], **common)
+            self.assertEqual(run['stopped_early']['waits'], 2)
+            self.assertFalse((tmp / 'a' / 'NASA-F-002.json').exists())
+            rejected = {**capped, 'calls': [{'alias': 'groq-economy', 'ok': True, 'raw_output': '{}'}]}
+            with patch.object(adapter, 'answer_one', return_value=rejected):
+                run = adapter.answer_all([BY_ID['NASA-F-003']], **common)
+            self.assertIsNone(run['stopped_early'])
+            saved = json.loads((tmp / 'a' / 'NASA-F-003.json').read_text())
+            self.assertEqual(saved['error']['kind'], 'all_route_outputs_rejected')
 
     def test_stage_timer_parses_app_telemetry(self):
         from backend.core.telemetry import duration

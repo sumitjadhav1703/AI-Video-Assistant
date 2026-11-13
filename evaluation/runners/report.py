@@ -88,17 +88,22 @@ def case_rows(answers, judge):
                          citation_check=deterministic.check_citations(result, final),
                          evidence_alignment=deterministic.evidence_alignment(result, golden),
                          behavior=deterministic.check_behavior(result, golden))
+        elif case['error']:
+            # The user would receive an error (HTTP 503) instead of an answer or abstention.
+            entry['behavior'] = {'expected': golden['expected_behavior'], 'outcome': 'error', 'correct': False,
+                                 'reason': f'request failed: {case["error"].get("kind") or case["error"]["type"]}'}
         rows.append(entry)
     return rows
 
 
 def deterministic_summary(rows, adversarial):
-    done = [r for r in rows if 'behavior' in r]
+    judged = [r for r in rows if 'behavior' in r]           # includes request errors (scored incorrect)
+    done = [r for r in judged if 'citation_check' in r]      # cases with an app result
     citations = [c for r in done for c in r['citation_check']['details']]
     answered = [r for r in done if not r['abstained']]
     gold_hits = [r['evidence_alignment']['gold_hit'] for r in answered if r['evidence_alignment']['gold_hit'] is not None]
     by_category = {}
-    for r in done:
+    for r in judged:
         b = by_category.setdefault(r['category'], {'n': 0, 'correct': 0})
         b['n'] += 1
         b['correct'] += r['behavior']['correct']
@@ -111,9 +116,9 @@ def deterministic_summary(rows, adversarial):
         'citation_exact_quote_rate': sum(c['exact_quote'] for c in citations) / len(citations) if citations else None,
         'citation_timestamp_match_rate': sum(c['timestamps_match_chunk'] for c in citations) / len(citations) if citations else None,
         'answered_with_gold_citation_rate': sum(gold_hits) / len(gold_hits) if gold_hits else None,
-        'behavior_accuracy': sum(r['behavior']['correct'] for r in done) / len(done) if done else None,
+        'behavior_accuracy': sum(r['behavior']['correct'] for r in judged) / len(judged) if judged else None,
         'behavior_by_category': {k: {**v, 'accuracy': v['correct'] / v['n']} for k, v in sorted(by_category.items())},
-        'abstention': deterministic.abstention_metrics([r['behavior'] for r in done]),
+        'abstention': deterministic.abstention_metrics([r['behavior'] for r in judged]),
         'adversarial_cases': len(adversarial or []),
         'adversarial_pass_rate': sum(a['passed'] for a in adversarial) / len(adversarial) if adversarial else None,
     }
@@ -137,7 +142,12 @@ def latency_summary(answers):
                              'questions_with_retry': sum(len(c['calls']) > 1 for c in cases),
                              'per_question': distribution([len(c['calls']) for c in cases]),
                              'failures_by_type': dict(Counter(c['error'] for c in calls if not c.get('ok'))),
-                             'answers_by_model': dict(Counter(f"{c['provider']}:{c['model']}" for c in calls if c.get('ok')))}
+                             # ok = the provider replied; the app may still reject the output (schema/grounding) and fail over.
+                             'provider_responses_by_model': dict(Counter(f"{c['provider']}:{c['model']}" for c in calls if c.get('ok'))),
+                             'outputs_rejected_by_app': sum(sum(1 for x in c['calls'] if x.get('ok')) - (1 if c['result'] and c['calls'] else 0)
+                                                            for c in cases),
+                             'final_answers_by_model': dict(Counter(c['result']['model'].get('model', 'none (no generation)')
+                                                                    for c in cases if c['result']))}
     out['request_errors'] = dict(Counter(c['error']['type'] for c in cases if c['error']))
     return out
 
@@ -281,7 +291,7 @@ def _failures_md(rows, judge, adversarial):
     lines += ['## Request errors', ''] + ([f'- {r["id"]}: {r["error"]["type"]}' for r in errors] or empty) + ['']
     behavior = [r for r in rows if 'behavior' in r and not r['behavior']['correct']]
     lines += ['## Answer/abstain behaviour failures', '']
-    lines += [f'- **{r["id"]}** ({r["category"]}): {r["behavior"]["reason"]}. Q: {r["question"]} A: {r["answer"][:300]}'
+    lines += [f'- **{r["id"]}** ({r["category"]}): {r["behavior"]["reason"]}. Q: {r["question"]} A: {r.get("answer", "(no answer: request failed)")[:300]}'
               for r in behavior] or empty
     bad_cites = [r for r in rows if 'citation_check' in r and not r['citation_check']['all_valid']]
     lines += ['', '## Invalid citations', ''] + ([f'- {r["id"]}: {r["citation_check"]["details"]}' for r in bad_cites] or empty)

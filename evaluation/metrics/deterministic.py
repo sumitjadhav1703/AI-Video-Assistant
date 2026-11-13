@@ -98,7 +98,7 @@ def abstention_metrics(rows):
     """
     tp = sum(r['expected'] == 'abstain' and r['outcome'] == 'abstained' for r in rows)
     fp = sum(r['expected'] == 'answer' and r['outcome'] == 'abstained' for r in rows)
-    fn = sum(r['expected'] == 'abstain' and r['outcome'] == 'answered' for r in rows)
+    fn = sum(r['expected'] == 'abstain' and r['outcome'] != 'abstained' for r in rows)  # answered or errored
     answerable = sum(r['expected'] == 'answer' for r in rows)
     precision = tp / (tp + fp) if tp + fp else None
     recall = tp / (tp + fn) if tp + fn else None

@@ -75,10 +75,18 @@ def stage_judge(args):
     out.mkdir(parents=True, exist_ok=True)
     with guards.network_guard(guards.allowed_hosts('local', judge=True)):
         for stage in deepeval_suite.STAGES:
-            rows = judge_runner.judge_stage(cases, stage, judge, max_concurrent=args.max_concurrent)
-            (out / f'{stage}.json').write_text(json.dumps(rows, indent=1))
-            print(f'{stage}: {len(rows)} test cases judged; spend so far ${judge.ledger.spent:.4f}')
-        if not args.pilot and not args.no_sanity:
+            path = out / f'{stage}.json'
+            # Resume: keep complete rows from earlier runs, judge only what is missing.
+            kept = [r for r in json.loads(path.read_text())
+                    if not r.get('missing') and not any(m['error'] for m in r['metrics'])] \
+                if path.exists() and not args.force else []
+            rows = judge_runner.judge_stage(cases, stage, judge, max_concurrent=args.max_concurrent,
+                                            skip={r['name'] for r in kept})
+            path.write_text(json.dumps(kept + rows, indent=1))
+            missing = sum(1 for r in rows if r.get('missing'))
+            print(f'{stage}: {len(kept)} kept, {len(rows)} judged now ({missing} missing); '
+                  f'spend so far ${judge.ledger.spent:.4f}')
+        if not args.pilot and not args.no_sanity and (args.force or not (out / 'sanity.json').exists()):
             (out / 'sanity.json').write_text(json.dumps(judge_runner.judge_sanity(judge, max_concurrent=args.max_concurrent), indent=1))
     summary = judge.ledger.summary()
     if args.pilot and cases:

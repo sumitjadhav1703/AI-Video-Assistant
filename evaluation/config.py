@@ -74,6 +74,9 @@ FORCED_APP_ENV = {
     'DEEPEVAL_TELEMETRY_OPT_OUT': 'YES',
     'DEEPEVAL_DISABLE_DOTENV': '1',
     'CONFIDENT_TRACE_FLUSH': 'NO',
+    # DeepEval's default ~200 s gather timeout over ALL test cases silently cancelled half a run;
+    # the judge client keeps its own per-call timeout (JUDGE_TIMEOUT_SECONDS).
+    'DEEPEVAL_DISABLE_TIMEOUTS': '1',
 }
 
 # Retrieval cut-offs used for IR metrics: the app keeps 10 dense + 10 sparse, fuses to 12, reranks to 4.

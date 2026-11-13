@@ -253,7 +253,8 @@ def answer_one(golden, *, job_id, scope, documents, budget_original):
 
 
 def answer_all(goldens, *, scope, job_id=build_chunks.JOB_ID, force=False, out_dir=config.RAW_DIR / 'answers',
-               cache_path=config.CACHE_DIR / 'query_embeddings.json', progress=print):
+               cache_path=config.CACHE_DIR / 'query_embeddings.json', progress=print,
+               rate_waits=3, rate_wait_seconds=65, sleep=time.sleep):
     """Answer every golden, resumable: existing per-case files are kept unless force=True."""
     from backend.core.guardrails import sanitize_text
     from backend.core.llm_gateway import operation_scope
@@ -262,6 +263,7 @@ def answer_all(goldens, *, scope, job_id=build_chunks.JOB_ID, force=False, out_d
     from backend import db
     out_dir.mkdir(parents=True, exist_ok=True)
     documents = verify_index(job_id)
+    quota_errors = (RouteQuotaExceeded.__name__, 'LimitExceeded', 'RuntimeError')
     todo = [g for g in goldens if force or not (out_dir / f'{g["id"]}.json').exists()]
     run = {'scope': scope, 'git_sha': git_sha(), 'started': now(), 'warmup_ms': warm_up(), 'cases': [],
            'embedding': {}, 'stopped_early': None}
@@ -275,16 +277,29 @@ def answer_all(goldens, *, scope, job_id=build_chunks.JOB_ID, force=False, out_d
                         'batch_requests': cache.batch_requests}
     with cache.serve(stats), per_question_job_budget() as budget_original:
         for number, golden in enumerate(todo, 1):
-            case = answer_one(golden, job_id=job_id, scope=scope, documents=documents, budget_original=budget_original)
+            waits = []
+            for attempt in range(1 + rate_waits):
+                case = answer_one(golden, job_id=job_id, scope=scope, documents=documents, budget_original=budget_original)
+                if not (case['error'] and case['error']['type'] in quota_errors) or attempt == rate_waits:
+                    break
+                # Per-minute route caps (rpm/tpm) free up after a minute; wait them out instead of bypassing them.
+                waits.append({'error': case['error'], 'calls': case['calls']})
+                progress(f'    {golden["id"]}: {case["error"]["message"]}; waiting {rate_wait_seconds}s for per-minute caps')
+                sleep(rate_wait_seconds)
+            case['rate_waits'] = waits
             case['cold'] = number == 1
             (out_dir / f'{golden["id"]}.json').write_text(json.dumps(case, ensure_ascii=False, indent=1))
             run['cases'].append(golden['id'])
             status = case['error']['type'] if case['error'] else ('abstained' if case['result']['abstained'] else 'answered')
             progress(f'[{number}/{len(todo)}] {golden["id"]}: {status} ({case["e2e_ms"]} ms)')
-            if case['error'] and case['error']['type'] in (RouteQuotaExceeded.__name__, 'LimitExceeded', 'RuntimeError'):
-                # Daily caps or no eligible route: stop and resume later instead of burning retries.
+            if case['error'] and case['error']['type'] in quota_errors and any(c.get('ok') for c in case['calls']):
+                # Providers answered but the app rejected every output: a genuine app failure, recorded as such.
+                case['error']['kind'] = 'all_route_outputs_rejected'
+                (out_dir / f'{golden["id"]}.json').write_text(json.dumps(case, ensure_ascii=False, indent=1))
+            elif case['error'] and case['error']['type'] in quota_errors:
+                # Still capped after waiting (likely a daily cap): stop and resume later instead of burning retries.
                 (out_dir / f'{golden["id"]}.json').unlink()
-                run['stopped_early'] = case['error']
+                run['stopped_early'] = {**case['error'], 'id': golden['id'], 'calls': case['calls'], 'waits': len(waits)}
                 break
     run['embedding']['cache'] = stats
     run['finished'] = now()
