@@ -1,0 +1,1407 @@
+{
+ "production_capture": null,
+ "offline": {
+  "ir": {
+   "bm25_only": {
+    "n": 39,
+    "hit": 1.0,
+    "recall": 0.8974358974358975,
+    "precision": 0.30128205128205127,
+    "mrr": 0.8611111111111109,
+    "ndcg": 0.8265894445741512
+   },
+   "bm25_rerank": {
+    "n": 39,
+    "hit": 1.0,
+    "recall": 0.9743589743589743,
+    "precision": 0.34615384615384615,
+    "mrr": 0.8846153846153846,
+    "ndcg": 0.8941303819236722
+   }
+  },
+  "comparison": {
+   "verdict": "improved",
+   "bootstrap": {
+    "mean_diff": 0.07692307692307694,
+    "ci95": [
+     0.02564102564102564,
+     0.14102564102564102
+    ],
+    "n": 39
+   }
+  },
+  "latency": {
+   "sparse_ms": {
+    "n": 45,
+    "p50": 0.668,
+    "p95": 1.1165999999999996,
+    "p99": 1.3738000000000004,
+    "mean": 0.7996222222222221,
+    "max": 1.442
+   },
+   "rerank_ms": {
+    "n": 45,
+    "p50": 7.573,
+    "p95": 9.1848,
+    "p99": 9.58728,
+    "mean": 7.570822222222223,
+    "max": 9.593
+   }
+  },
+  "cases": [
+   {
+    "id": "NASA-F-001",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000015",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000021",
+     "9e08293bb466d20b97edb862ec6eba2f:000017"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000021",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000015"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000000"
+    ]
+   },
+   {
+    "id": "NASA-F-002",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000021",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000011"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000021",
+     "9e08293bb466d20b97edb862ec6eba2f:000011"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000000"
+    ]
+   },
+   {
+    "id": "NASA-F-003",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000003"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000003"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000001"
+    ]
+   },
+   {
+    "id": "NASA-F-004",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000012"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000012"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000002"
+    ]
+   },
+   {
+    "id": "NASA-F-005",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000011"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000000"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000003"
+    ]
+   },
+   {
+    "id": "NASA-F-006",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000006",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000012",
+     "9e08293bb466d20b97edb862ec6eba2f:000020"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000006",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000012",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000004"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000006"
+    ]
+   },
+   {
+    "id": "NASA-F-007",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000005"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000003"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000008"
+    ]
+   },
+   {
+    "id": "NASA-F-008",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000012",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000015",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000018",
+     "9e08293bb466d20b97edb862ec6eba2f:000011"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000012",
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000015",
+     "9e08293bb466d20b97edb862ec6eba2f:000018"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000012"
+    ]
+   },
+   {
+    "id": "NASA-F-009",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000018",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000001"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000018",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000007"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000018"
+    ]
+   },
+   {
+    "id": "NASA-F-010",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000014",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000006",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000015",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000012",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000020"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000014",
+     "9e08293bb466d20b97edb862ec6eba2f:000006",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000012",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000015",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000000"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000014"
+    ]
+   },
+   {
+    "id": "NASA-N-001",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000017"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000017"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000001"
+    ]
+   },
+   {
+    "id": "NASA-N-002",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000003"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000003"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000001"
+    ]
+   },
+   {
+    "id": "NASA-N-003",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000006",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000012",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000003"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000006",
+     "9e08293bb466d20b97edb862ec6eba2f:000012",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000017"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000005"
+    ]
+   },
+   {
+    "id": "NASA-N-004",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000015",
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000016"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000016",
+     "9e08293bb466d20b97edb862ec6eba2f:000015",
+     "9e08293bb466d20b97edb862ec6eba2f:000010"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000004"
+    ]
+   },
+   {
+    "id": "NASA-N-005",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000018",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000013",
+     "9e08293bb466d20b97edb862ec6eba2f:000017"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000018",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000013"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000004"
+    ]
+   },
+   {
+    "id": "NASA-N-006",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000021",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000012"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000021",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000012",
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000017"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000021"
+    ]
+   },
+   {
+    "id": "NASA-E-001",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000018",
+     "9e08293bb466d20b97edb862ec6eba2f:000016",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000006",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000014",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000015"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000018",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000016",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000006",
+     "9e08293bb466d20b97edb862ec6eba2f:000014",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000015"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000000"
+    ]
+   },
+   {
+    "id": "NASA-E-002",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000013",
+     "9e08293bb466d20b97edb862ec6eba2f:000015",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000001"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000013",
+     "9e08293bb466d20b97edb862ec6eba2f:000015"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000009"
+    ]
+   },
+   {
+    "id": "NASA-E-003",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000018",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000016"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000018",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000016",
+     "9e08293bb466d20b97edb862ec6eba2f:000003"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000019"
+    ]
+   },
+   {
+    "id": "NASA-E-004",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000018",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000015",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000009"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000018",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000015",
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000011"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000018"
+    ]
+   },
+   {
+    "id": "NASA-E-005",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000015",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000014",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000008"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000015",
+     "9e08293bb466d20b97edb862ec6eba2f:000014",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000007"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000015"
+    ]
+   },
+   {
+    "id": "NASA-M-001",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000008"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000011"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000004"
+    ]
+   },
+   {
+    "id": "NASA-M-002",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000013",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000016",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000021",
+     "9e08293bb466d20b97edb862ec6eba2f:000014",
+     "9e08293bb466d20b97edb862ec6eba2f:000012"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000014",
+     "9e08293bb466d20b97edb862ec6eba2f:000013",
+     "9e08293bb466d20b97edb862ec6eba2f:000016",
+     "9e08293bb466d20b97edb862ec6eba2f:000021",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000012",
+     "9e08293bb466d20b97edb862ec6eba2f:000005"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000013",
+     "9e08293bb466d20b97edb862ec6eba2f:000014"
+    ]
+   },
+   {
+    "id": "NASA-M-003",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000016",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000014",
+     "9e08293bb466d20b97edb862ec6eba2f:000021",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000006",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000003"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000016",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000014",
+     "9e08293bb466d20b97edb862ec6eba2f:000021",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000006",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000005"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000016",
+     "9e08293bb466d20b97edb862ec6eba2f:000017"
+    ]
+   },
+   {
+    "id": "NASA-M-004",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000021",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000008"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000021",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000005"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000020"
+    ]
+   },
+   {
+    "id": "NASA-M-005",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000006",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000021",
+     "9e08293bb466d20b97edb862ec6eba2f:000012",
+     "9e08293bb466d20b97edb862ec6eba2f:000018",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000000"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000006",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000012",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000018",
+     "9e08293bb466d20b97edb862ec6eba2f:000021"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000010"
+    ]
+   },
+   {
+    "id": "NASA-M-006",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000012",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000014",
+     "9e08293bb466d20b97edb862ec6eba2f:000021",
+     "9e08293bb466d20b97edb862ec6eba2f:000013",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000016",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000004"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000012",
+     "9e08293bb466d20b97edb862ec6eba2f:000014",
+     "9e08293bb466d20b97edb862ec6eba2f:000013",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000021",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000016",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000004"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000012",
+     "9e08293bb466d20b97edb862ec6eba2f:000013"
+    ]
+   },
+   {
+    "id": "NASA-H-001",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000017"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000017"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000010"
+    ]
+   },
+   {
+    "id": "NASA-H-002",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000012",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000006",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000001"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000012",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000006",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000011"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000012"
+    ]
+   },
+   {
+    "id": "NASA-H-003",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000016",
+     "9e08293bb466d20b97edb862ec6eba2f:000013",
+     "9e08293bb466d20b97edb862ec6eba2f:000015",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000017"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000015",
+     "9e08293bb466d20b97edb862ec6eba2f:000016",
+     "9e08293bb466d20b97edb862ec6eba2f:000013",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000005"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000015",
+     "9e08293bb466d20b97edb862ec6eba2f:000016"
+    ]
+   },
+   {
+    "id": "NASA-H-004",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000015",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000005"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000015",
+     "9e08293bb466d20b97edb862ec6eba2f:000007"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000004"
+    ]
+   },
+   {
+    "id": "NASA-H-005",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000016",
+     "9e08293bb466d20b97edb862ec6eba2f:000018",
+     "9e08293bb466d20b97edb862ec6eba2f:000021",
+     "9e08293bb466d20b97edb862ec6eba2f:000014",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000006",
+     "9e08293bb466d20b97edb862ec6eba2f:000001"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000016",
+     "9e08293bb466d20b97edb862ec6eba2f:000021",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000018",
+     "9e08293bb466d20b97edb862ec6eba2f:000014",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000006"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000016",
+     "9e08293bb466d20b97edb862ec6eba2f:000019"
+    ]
+   },
+   {
+    "id": "NASA-U-001",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000015",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000003"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000015"
+    ],
+    "gold": []
+   },
+   {
+    "id": "NASA-U-002",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000015",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000018",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000007"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000018",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000015",
+     "9e08293bb466d20b97edb862ec6eba2f:000003"
+    ],
+    "gold": []
+   },
+   {
+    "id": "NASA-U-003",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000009"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000003"
+    ],
+    "gold": []
+   },
+   {
+    "id": "NASA-U-004",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000013",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000014",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000000",
+     "9e08293bb466d20b97edb862ec6eba2f:000015",
+     "9e08293bb466d20b97edb862ec6eba2f:000005"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000014",
+     "9e08293bb466d20b97edb862ec6eba2f:000013",
+     "9e08293bb466d20b97edb862ec6eba2f:000015",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000000"
+    ],
+    "gold": []
+   },
+   {
+    "id": "NASA-U-005",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000018",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000008"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000018",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000007"
+    ],
+    "gold": []
+   },
+   {
+    "id": "NASA-U-006",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000018",
+     "9e08293bb466d20b97edb862ec6eba2f:000015",
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000004"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000018",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000015",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000011"
+    ],
+    "gold": []
+   },
+   {
+    "id": "NASA-A-001",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000006",
+     "9e08293bb466d20b97edb862ec6eba2f:000018"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000006",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000018"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000021"
+    ]
+   },
+   {
+    "id": "NASA-A-002",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000018",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000021",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000011"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000018",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000021",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000017"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000020"
+    ]
+   },
+   {
+    "id": "NASA-A-003",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000006",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000013"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000006",
+     "9e08293bb466d20b97edb862ec6eba2f:000013",
+     "9e08293bb466d20b97edb862ec6eba2f:000019"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000004"
+    ]
+   },
+   {
+    "id": "NASA-P-001",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000006",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000010"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000006"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000004"
+    ]
+   },
+   {
+    "id": "NASA-P-002",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000019",
+     "9e08293bb466d20b97edb862ec6eba2f:000008"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000019"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000001"
+    ]
+   },
+   {
+    "id": "NASA-P-003",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000020"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000004",
+     "9e08293bb466d20b97edb862ec6eba2f:000017",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000020"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000002"
+    ]
+   },
+   {
+    "id": "NASA-P-004",
+    "sparse_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000003",
+     "9e08293bb466d20b97edb862ec6eba2f:000002"
+    ],
+    "bm25_rerank_ranking": [
+     "9e08293bb466d20b97edb862ec6eba2f:000010",
+     "9e08293bb466d20b97edb862ec6eba2f:000009",
+     "9e08293bb466d20b97edb862ec6eba2f:000007",
+     "9e08293bb466d20b97edb862ec6eba2f:000001",
+     "9e08293bb466d20b97edb862ec6eba2f:000020",
+     "9e08293bb466d20b97edb862ec6eba2f:000008",
+     "9e08293bb466d20b97edb862ec6eba2f:000011",
+     "9e08293bb466d20b97edb862ec6eba2f:000005",
+     "9e08293bb466d20b97edb862ec6eba2f:000002",
+     "9e08293bb466d20b97edb862ec6eba2f:000003"
+    ],
+    "gold": [
+     "9e08293bb466d20b97edb862ec6eba2f:000010"
+    ]
+   }
+  ]
+ }
+}

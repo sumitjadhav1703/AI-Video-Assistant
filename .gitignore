@@ -16,3 +16,11 @@ venv/
 # Transient artifacts (audio is processed then discarded; nothing here is durable)
 downloades/
 vector_db/
+
+# Evaluation framework (local-only artefacts)
+evaluation/.venv/
+evaluation/.cache/
+evaluation/reports/raw/
+evaluation/reports/judge_ledger.json
+evaluation/reports/judge_ledger.tmp
+.deepeval/

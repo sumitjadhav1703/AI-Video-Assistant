@@ -1,0 +1,74 @@
+{
+  "meta": {
+    "generated_at": "2026-11-13T12:08:59+00:00",
+    "mode": "offline",
+    "mode_description": "fully offline (no external inference)",
+    "deepeval_version": "4.3.4",
+    "dataset_size": 45,
+    "source_id": "nasa-cop26-stgermain",
+    "judge_model": null,
+    "generator_models_observed": [],
+    "answers_captured": 0,
+    "stages_run": {
+      "answer": false,
+      "judge": [],
+      "offline": true
+    },
+    "judge_spend_usd": 0.0,
+    "thresholds": {
+      "Faithfulness": 0.8,
+      "Answer Relevancy": 0.7,
+      "Contextual Precision": 0.7,
+      "Contextual Recall": 0.7,
+      "Contextual Relevancy": 0.5
+    },
+    "runs": []
+  },
+  "deepeval": {},
+  "deterministic": {
+    "cases_with_result": 0,
+    "cases_with_error": 0,
+    "structure_validity": null,
+    "citations_total": 0,
+    "citation_validity": null,
+    "citation_in_context_rate": null,
+    "citation_exact_quote_rate": null,
+    "citation_timestamp_match_rate": null,
+    "answered_with_gold_citation_rate": null,
+    "behavior_accuracy": null,
+    "behavior_by_category": {},
+    "abstention": {
+      "true_abstentions": 0,
+      "false_abstentions": 0,
+      "missed_abstentions": 0,
+      "abstention_precision": null,
+      "abstention_recall": null,
+      "abstention_f1": null,
+      "false_abstention_rate": null
+    },
+    "adversarial_cases": 15,
+    "adversarial_pass_rate": 1.0
+  },
+  "ir": {
+    "production_capture": {},
+    "offline": {
+      "bm25_only": {
+        "n": 39,
+        "hit": 1.0,
+        "recall": 0.8974358974358975,
+        "precision": 0.30128205128205127,
+        "mrr": 0.8611111111111109,
+        "ndcg": 0.8265894445741512
+      },
+      "bm25_rerank": {
+        "n": 39,
+        "hit": 1.0,
+        "recall": 0.9743589743589743,
+        "precision": 0.34615384615384615,
+        "mrr": 0.8846153846153846,
+        "ndcg": 0.8941303819236722
+      }
+    }
+  },
+  "latency": null
+}
