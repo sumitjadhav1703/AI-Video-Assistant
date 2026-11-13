@@ -1,0 +1,31 @@
+{
+  "measured_at": "2026-11-13",
+  "source": "Local run of the production image (512 MiB limit) on a throwaway pgvector database; 21 s synthetic clip, one analysis and two chats; token counts are the providers' own reported usage from provider_attempts.",
+  "analysis": {
+    "audio_seconds": 21,
+    "time_to_result_ms": 6187,
+    "stages": [
+      {"stage": "Audio conversion (ffmpeg)", "provider": "local", "model": "ffmpeg", "elapsed_ms": 128, "input_tokens": null, "output_tokens": null, "note": "Runs inside the container; no provider call."},
+      {"stage": "Transcription", "provider": "groq", "model": "whisper-large-v3-turbo", "elapsed_ms": 1731, "input_tokens": null, "output_tokens": null, "note": "Billed by audio length: 21.0 s of audio, 5 segments."},
+      {"stage": "Title", "provider": "nvidia_nim", "model": "nemotron-3.5-lightning-30b-a3b", "elapsed_ms": 874, "input_tokens": 175, "output_tokens": 14},
+      {"stage": "Summary", "provider": "groq", "model": "gpt-oss-20b", "elapsed_ms": 647, "input_tokens": 231, "output_tokens": 76},
+      {"stage": "Findings (actions, decisions, questions)", "provider": "gemini", "model": "gemini-2.5-flash", "elapsed_ms": 1772, "input_tokens": 335, "output_tokens": 129},
+      {"stage": "Embedding + pgvector index", "provider": "gemini", "model": "gemini-embedding-001", "elapsed_ms": 743, "input_tokens": null, "output_tokens": null, "note": "1 request for 1 chunk; Gemini does not report token usage for embeddings."}
+    ],
+    "llm_tokens_total": {"input": 741, "output": 219}
+  },
+  "chat": {
+    "short_clip": {"description": "This 21 s clip (1 transcript chunk as evidence)", "calls": [
+      {"provider": "nvidia_nim", "model": "nemotron-3.5-lightning-30b-a3b", "elapsed_ms": 1772, "input_tokens": 375, "output_tokens": 105, "note": "Chat 1: Gemini Flash answered first but its output was rejected by the citation validator; the next free route answered."},
+      {"provider": "nvidia_nim", "model": "nemotron-3.5-lightning-30b-a3b", "elapsed_ms": 1454, "input_tokens": 375, "output_tokens": 114}
+    ], "query_embedding_ms": [850, 765], "rerank_ms": [11, 3]},
+    "full_talk": {"description": "13.5-minute NASA talk from the evaluation (4 chunks of ~500 characters as evidence)", "input_tokens_median": 830, "output_tokens_median": 150, "attempts_per_question_mean": 1.27, "end_to_end_ms_p50": 2085, "end_to_end_ms_p95": 5128}
+  },
+  "reservations": {
+    "note": "Before each call the app reserves a pessimistic token amount against the provider's per-minute and daily caps; actual usage is far lower.",
+    "chat_reserved_input_tokens_typical": 3440,
+    "chat_reserved_output_tokens": 1024,
+    "job_lifetime_budget": {"attempts": 24, "input_tokens": 60000, "output_tokens": 12000}
+  },
+  "cost_usd": {"provider_calls": 0, "note": "Every route used is a verified free route; paid routes are disabled for public visitors."}
+}

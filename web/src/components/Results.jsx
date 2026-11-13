@@ -17,7 +17,7 @@ const CARD = {
 };
 const LABEL = { fontFamily: MONO, fontSize: 11, letterSpacing: '0.08em', color: `var(--result-label-color, ${MUTE})` };
 
-export default function Results({ result, meta, chat, onAsk, sampleMedia, presetQuestions, onSeek }) {
+export default function Results({ result, meta, chat, onAsk }) {
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const today = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
   const transcript = transcriptOpen ? toParagraphs(result.transcript) : [];
@@ -44,12 +44,7 @@ export default function Results({ result, meta, chat, onAsk, sampleMedia, preset
   ].filter(Boolean);
 
   const questions = (
-    <Chat
-      chat={chat}
-      onAsk={onAsk}
-      presetQuestions={presetQuestions}
-      onSeek={onSeek}
-    />
+    <Chat chat={chat} onAsk={onAsk} />
   );
 
   const notes = (
@@ -81,19 +76,6 @@ export default function Results({ result, meta, chat, onAsk, sampleMedia, preset
         <section className="results-finding" key={g.label}>
           <div className="results-card" style={{ ...CARD, animation: 'fadeUp .9s cubic-bezier(.22,1,.36,1) .25s both' }}>
             <div>
-              {sampleMedia && <div
-                style={{
-                  fontFamily: SANS,
-                  fontWeight: 300,
-                  fontSize: 'clamp(60px,7vw,110px)',
-                  lineHeight: 0.9,
-                  letterSpacing: '-0.04em',
-                  color: 'rgba(232,229,222,0.10)',
-                  marginBottom: 14,
-                }}
-              >
-                0{gi + 1}
-              </div>}
               <span style={LABEL}>{g.label}</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', maxWidth: 760 }}>
@@ -111,7 +93,6 @@ export default function Results({ result, meta, chat, onAsk, sampleMedia, preset
                     transition: 'transform .3s cubic-bezier(.22,1,.36,1)',
                   }}
                 >
-                  {sampleMedia && <span style={{ fontFamily: MONO, fontSize: 10, color: DIM }}>0{i + 1}</span>}
                   <span
                     className="results-finding-text"
                     style={{
@@ -134,9 +115,9 @@ export default function Results({ result, meta, chat, onAsk, sampleMedia, preset
   );
 
   return (
-    <article className={`session-results ${sampleMedia ? 'sample-results' : 'live-results'}`}>
+    <article className="session-results live-results">
       <header className="results-header">
-        <div className="results-session-date" style={LABEL}>{sampleMedia ? 'Prepared sample' : `Session — ${today}`}</div>
+        <div className="results-session-date" style={LABEL}>{`Session — ${today}`}</div>
         <h1 className="results-title">
           <span style={{ display: 'block', overflow: 'hidden', paddingBottom: '0.05em' }}>
             <span style={{ display: 'block', animation: 'lineUp 1s cubic-bezier(.22,1,.36,1) .1s both' }}>
@@ -151,9 +132,8 @@ export default function Results({ result, meta, chat, onAsk, sampleMedia, preset
             </span>
           ))}
         </div>
-        {sampleMedia}
       </header>
-      <div className={sampleMedia ? undefined : 'live-results-workspace'}>
+      <div className="live-results-workspace">
         {questions}
         {notes}
       </div>

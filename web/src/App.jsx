@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { InfoLinks } from './components/InfoShell';
 import Nav from './components/Nav';
 import Overlays from './components/Overlays';
 import Preloader from './components/Preloader';
@@ -329,7 +330,7 @@ export default function App() {
           }}
         >
           <span>© 2026 Minutes</span>
-          <span>Upload · transcribe · ask</span>
+          <InfoLinks />
           <span>Every word, remembered</span>
         </div>
         <div style={{ overflow: 'hidden', padding: '0 var(--minutes-page-gutter, 32px)' }}>

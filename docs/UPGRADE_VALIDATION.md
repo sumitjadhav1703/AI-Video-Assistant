@@ -4,7 +4,7 @@ Date: 2026-11-05. Branch: `work/project-updates`. Baseline: `f5841e3`.
 
 ## Verdict and delivered scope
 
-The planning brief is applicable as a roadmap, with changes described in [the implementation plan](../UPGRADE_IMPLEMENTATION_PLAN.md). Its entire architecture is not approved for immediate deployment. The independent EGM design critique conditionally approved the initial safety phase; a separate Sol code reviewer found no blocking issue in that phase after fixes. This was a focused EGM critique, not a claim that every interactive EGM rubric was run.
+The planning brief is applicable as a roadmap, with changes described in the implementation plan (removed; read with `git show dfa7e60:UPGRADE_IMPLEMENTATION_PLAN.md`). Its entire architecture is not approved for immediate deployment. The independent EGM design critique conditionally approved the initial safety phase; a separate Sol code reviewer found no blocking issue in that phase after fixes. This was a focused EGM critique, not a claim that every interactive EGM rubric was run.
 
 Implemented locally: durable Postgres admission budgets, token-owned concurrency slots, default-disabled inference, bounded uploads/media/questions/transcripts/output, guarded STT/embeddings/generation, isolated media cleanup, safe active deletion and deletion-failure handling, partial-vector cleanup, narrow status polling, quota feedback, localhost development defaults, pinned tested backend dependencies and patched frontend development tooling. No new cloud service was introduced.
 
@@ -52,7 +52,7 @@ Without `TEST_DATABASE_URL`, database tests skip explicitly. Frontend: `cd web`,
 
 ## Artifacts
 
-- [Reviewed roadmap](../UPGRADE_IMPLEMENTATION_PLAN.md)
+- Reviewed roadmap (removed; read with `git show dfa7e60:UPGRADE_IMPLEMENTATION_PLAN.md`)
 - [Independent architecture critique](reviews/architecture-review.md)
 - [Backend test output](../output/validation/backend-tests.log)
 - [Browser quota denial screenshot](../output/playwright/quota-denial.png)

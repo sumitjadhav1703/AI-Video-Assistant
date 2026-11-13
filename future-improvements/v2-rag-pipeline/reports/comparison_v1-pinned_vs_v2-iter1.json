@@ -1,0 +1,188 @@
+{
+  "cases_compared": 31,
+  "cases_judged_in_both": 26,
+  "judged_in_only_one": {
+    "v1-pinned": [],
+    "v2-iter1": [
+      "NASA-E-003",
+      "NASA-F-004",
+      "NASA-H-005",
+      "NASA-M-003",
+      "NASA-M-004",
+      "NASA-M-005"
+    ]
+  },
+  "deterministic": {
+    "behaviour_accuracy": {
+      "v1-pinned": 0.8387096774193549,
+      "v2-iter1": 1.0
+    },
+    "request_errors_503": {
+      "v1-pinned": 5,
+      "v2-iter1": 0
+    },
+    "rejected_model_outputs": {
+      "v1-pinned": 5,
+      "v2-iter1": 0
+    },
+    "provider_attempts": {
+      "v1-pinned": 31,
+      "v2-iter1": 31
+    },
+    "abstention": {
+      "v1-pinned": {
+        "true_abstentions": 0,
+        "false_abstentions": 0,
+        "missed_abstentions": 0,
+        "abstention_precision": null,
+        "abstention_recall": null,
+        "abstention_f1": null,
+        "false_abstention_rate": 0.0
+      },
+      "v2-iter1": {
+        "true_abstentions": 0,
+        "false_abstentions": 0,
+        "missed_abstentions": 0,
+        "abstention_precision": null,
+        "abstention_recall": null,
+        "abstention_f1": null,
+        "false_abstention_rate": 0.0
+      }
+    },
+    "citations": {
+      "v1-pinned": {
+        "n": 37,
+        "valid_rate": 1.0
+      },
+      "v2-iter1": {
+        "n": 48,
+        "valid_rate": 1.0
+      }
+    }
+  },
+  "deepeval": {
+    "Faithfulness": {
+      "v1-pinned": 1.0,
+      "v2-iter1": 1.0,
+      "n": 25,
+      "bootstrap": {
+        "mean_diff": 0.0,
+        "ci95": [
+          0.0,
+          0.0
+        ],
+        "n": 25
+      }
+    },
+    "Answer Relevancy": {
+      "v1-pinned": 0.9807692307692307,
+      "v2-iter1": 0.9409340659340659,
+      "n": 26,
+      "bootstrap": {
+        "mean_diff": -0.03983516483516483,
+        "ci95": [
+          -0.13598901098901098,
+          0.038461538461538464
+        ],
+        "n": 26
+      }
+    },
+    "Contextual Precision": {
+      "v1-pinned": 0.9198717948717949,
+      "v2-iter1": 0.9326923076923077,
+      "n": 26,
+      "bootstrap": {
+        "mean_diff": 0.012820512820512822,
+        "ci95": [
+          -0.041666666666666664,
+          0.08012820512820513
+        ],
+        "n": 26
+      }
+    },
+    "Contextual Recall": {
+      "v1-pinned": 1.0,
+      "v2-iter1": 0.9807692307692307,
+      "n": 26,
+      "bootstrap": {
+        "mean_diff": -0.019230769230769232,
+        "ci95": [
+          -0.057692307692307696,
+          0.0
+        ],
+        "n": 26
+      }
+    },
+    "Contextual Relevancy": {
+      "v1-pinned": 0.25076088127558716,
+      "v2-iter1": 0.2727507652504676,
+      "n": 26,
+      "bootstrap": {
+        "mean_diff": 0.021989883974880393,
+        "ci95": [
+          -0.016876600021396407,
+          0.06148780518124409
+        ],
+        "n": 26
+      }
+    }
+  },
+  "retrieval": {
+    "quote_coverage@4": {
+      "v1-pinned": 1.0,
+      "v2-iter1": 0.9743589743589743,
+      "n": 26,
+      "bootstrap": {
+        "mean_diff": -0.025641025641025644,
+        "ci95": [
+          -0.06410256410256411,
+          0.0
+        ],
+        "n": 26
+      }
+    }
+  },
+  "latency": {
+    "v1-pinned": {
+      "n": 24,
+      "p50": 1939.0,
+      "p95": 4519.499999999998,
+      "generation_p50": 1866.5,
+      "generation_p95": 4445.949999999999,
+      "answer_chars_p50": 39.5
+    },
+    "v2-iter1": {
+      "n": 24,
+      "p50": 2256.0,
+      "p95": 6289.449999999996,
+      "generation_p50": 2154.5,
+      "generation_p95": 6194.549999999996,
+      "answer_chars_p50": 82.0
+    }
+  },
+  "judge_noise": null,
+  "gate": {
+    "must_hold": {
+      "faithfulness_not_worse": true,
+      "answer_relevancy_not_worse": true,
+      "citation_validity_100": true,
+      "abstention_f1_not_worse": true,
+      "quote_coverage_not_worse": true,
+      "latency_p95_within_25pct": false
+    },
+    "primary_improvements": {
+      "fewer_rejected_outputs": true,
+      "fewer_503s": true,
+      "higher_behaviour_accuracy": true,
+      "contextual_precision_or_recall_beyond_noise": false
+    },
+    "tolerances": {
+      "Faithfulness": 0.05,
+      "Answer Relevancy": 0.05,
+      "Contextual Precision": 0.05,
+      "Contextual Recall": 0.05,
+      "Contextual Relevancy": 0.05
+    },
+    "better": false
+  }
+}

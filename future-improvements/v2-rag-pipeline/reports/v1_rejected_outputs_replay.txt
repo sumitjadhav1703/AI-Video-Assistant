@@ -1,0 +1,17 @@
+v1-rejected outputs under v2 validator:
+  ('NASA-A-002', 'nvidia-nemotron', 'approx', 'v1 rejected', 'accepted')
+  ('NASA-A-002', 'groq-economy', 'approx', 'v1 rejected', 'accepted')
+  ('NASA-A-002', 'openrouter-nemotron', 'approx', 'v1 rejected', 'accepted')
+  ('NASA-F-004', 'nvidia-nemotron', 'exact', 'v1 rejected', 'accepted')
+  ('NASA-H-005', 'nvidia-nemotron', 'exact', 'v1 rejected', 'rejected')
+  ('NASA-M-001', 'gemini-flash', 'exact', 'v1 rejected', 'accepted')
+  ('NASA-M-001', 'nvidia-nemotron', 'exact', 'v1 rejected', 'accepted')
+  ('NASA-M-005', 'gemini-flash', 'exact', 'v1 rejected', 'accepted')
+  ('NASA-M-005', 'nvidia-nemotron', 'exact', 'v1 rejected', 'rejected')
+  ('NASA-P-003', 'nvidia-nemotron', 'approx', 'v1 rejected', 'accepted')
+  ('NASA-P-003', 'groq-economy', 'approx', 'v1 rejected', 'model abstention (valid)')
+  ('NASA-P-003', 'openrouter-nemotron', 'approx', 'v1 rejected', 'accepted')
+  ('NASA-U-005', 'nvidia-nemotron', 'exact', 'v1 rejected', 'rejected')
+  ('NASA-U-005', 'groq-economy', 'exact', 'v1 rejected', 'model abstention (valid)')
+Counter({('v1 accepted', 'accepted'): 36, ('v1 rejected', 'accepted'): 9, ('v1 accepted', 'model abstention (valid)'): 7, ('v1 rejected', 'rejected'): 3, ('v1 rejected', 'model abstention (valid)'): 2})
+regressions (v1 accepted -> v2 rejected): []

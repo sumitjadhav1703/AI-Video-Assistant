@@ -127,7 +127,7 @@ jobs:
           node scripts/release_vercel.mjs
           AVA_CHROMIUM_EXECUTABLE="$(command -v google-chrome)" \
             AVA_PLAYWRIGHT_MODULE="$RUNNER_TEMP/release-tools/node_modules/playwright/index.mjs" \
-            AVA_FRONTEND_TEST_URL="$VERCEL_URL" AVA_BACKEND_TEST_URL="$RENDER_URL" node web/tests/sample.browser.mjs
+            AVA_FRONTEND_TEST_URL="$VERCEL_URL" AVA_BACKEND_TEST_URL="$RENDER_URL" node web/tests/pages.browser.mjs
 
       - name: Deploy and verify Cloudflare Worker
         if: steps.activation.outputs.enabled == 'true'

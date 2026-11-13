@@ -1,0 +1,189 @@
+{
+  "production_capture": {
+    "note": "Query embeddings were fetched in one batched request and served from cache, so dense_retrieval measures the pgvector search only. Cold = first measured question of a run (excluded from warm stats).",
+    "cases": 45,
+    "cold_cases": 3,
+    "warm": {
+      "dense_retrieval": {
+        "n": 42,
+        "p50": 5.0,
+        "p95": 6.0,
+        "p99": 7.179999999999993,
+        "mean": 5.404761904761905,
+        "max": 8
+      },
+      "sparse_retrieval": {
+        "n": 42,
+        "p50": 1.0,
+        "p95": 1.0,
+        "p99": 1.0,
+        "mean": 1.0,
+        "max": 1
+      },
+      "rrf": {
+        "n": 42,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "mean": 0.0,
+        "max": 0
+      },
+      "rerank": {
+        "n": 42,
+        "p50": 8.0,
+        "p95": 10.0,
+        "p99": 11.179999999999993,
+        "mean": 8.357142857142858,
+        "max": 12
+      },
+      "generation": {
+        "n": 52,
+        "p50": 2016.5,
+        "p95": 3693.949999999999,
+        "p99": 5550.030000000001,
+        "mean": 2152.230769230769,
+        "max": 5625
+      },
+      "end_to_end": {
+        "n": 40,
+        "p50": 2084.5,
+        "p95": 5128.449999999999,
+        "p99": 7945.589999999998,
+        "mean": 2556.7,
+        "max": 9474
+      }
+    },
+    "all": {
+      "dense_retrieval": {
+        "n": 45,
+        "p50": 5.0,
+        "p95": 6.0,
+        "p99": 7.1200000000000045,
+        "mean": 5.444444444444445,
+        "max": 8
+      },
+      "sparse_retrieval": {
+        "n": 45,
+        "p50": 1.0,
+        "p95": 1.0,
+        "p99": 1.0,
+        "mean": 1.0,
+        "max": 1
+      },
+      "rrf": {
+        "n": 45,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "mean": 0.0,
+        "max": 0
+      },
+      "rerank": {
+        "n": 45,
+        "p50": 8.0,
+        "p95": 10.0,
+        "p99": 12.560000000000002,
+        "mean": 8.488888888888889,
+        "max": 13
+      },
+      "generation": {
+        "n": 57,
+        "p50": 1887.0,
+        "p95": 3631.199999999999,
+        "p99": 5542.679999999999,
+        "mean": 2115.1929824561403,
+        "max": 5625
+      },
+      "end_to_end": {
+        "n": 43,
+        "p50": 2211.0,
+        "p95": 5068.299999999999,
+        "p99": 7828.019999999993,
+        "mean": 2586.7441860465115,
+        "max": 9474
+      }
+    },
+    "candidates": {
+      "dense_count": {
+        "n": 43,
+        "p50": 10.0,
+        "p95": 10.0,
+        "p99": 10.0,
+        "mean": 10.0,
+        "max": 10
+      },
+      "sparse_count": {
+        "n": 43,
+        "p50": 10.0,
+        "p95": 10.0,
+        "p99": 10.0,
+        "mean": 9.976744186046512,
+        "max": 10
+      },
+      "fused_count": {
+        "n": 43,
+        "p50": 12.0,
+        "p95": 12.0,
+        "p99": 12.0,
+        "mean": 11.953488372093023,
+        "max": 12
+      },
+      "final_count": {
+        "n": 43,
+        "p50": 4.0,
+        "p95": 4.0,
+        "p99": 4.0,
+        "mean": 4.0,
+        "max": 4
+      }
+    },
+    "provider_calls": {
+      "total_attempts": 57,
+      "failed_attempts": 0,
+      "questions_with_retry": 7,
+      "per_question": {
+        "n": 45,
+        "p50": 1.0,
+        "p95": 3.0,
+        "p99": 3.0,
+        "mean": 1.2666666666666666,
+        "max": 3
+      },
+      "failures_by_type": {},
+      "provider_responses_by_model": {
+        "nvidia_nim:nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b": 23,
+        "groq:groq/openai/gpt-oss-20b": 8,
+        "openrouter:openrouter/nvidia/nemotron-3.5-lightning:free": 9,
+        "gemini:gemini/gemini-2.5-flash": 17
+      },
+      "outputs_rejected_by_app": 14,
+      "final_answers_by_model": {
+        "nvidia_nim/nvidia/nemotron-3.5-lightning-30b-a3b": 16,
+        "openrouter/nvidia/nemotron-3.5-lightning:free": 7,
+        "gemini/gemini-2.5-flash": 15,
+        "groq/openai/gpt-oss-20b": 5
+      }
+    },
+    "request_errors": {
+      "RuntimeError": 2
+    }
+  },
+  "offline": {
+    "sparse_ms": {
+      "n": 45,
+      "p50": 0.645,
+      "p95": 0.691,
+      "p99": 1.0547600000000013,
+      "mean": 0.6626222222222222,
+      "max": 1.317
+    },
+    "rerank_ms": {
+      "n": 45,
+      "p50": 6.266,
+      "p95": 7.3094,
+      "p99": 12.261360000000005,
+      "mean": 6.593644444444444,
+      "max": 13.43
+    }
+  }
+}

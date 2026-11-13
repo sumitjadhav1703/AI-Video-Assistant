@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { InfoLinks } from './InfoShell';
 import { SANS, MONO, CREAM, SUBTLE, MUTE, DIM } from '../lib/theme';
 import { humanSize } from '../lib/parse';
 
@@ -160,6 +161,7 @@ export default function Empty({ mode, languages = ['english'], submitting, onAna
   return (
     <div>
       <section style={{ padding: '8vh var(--minutes-page-gutter, 44px) 90px', maxWidth: 1160, margin: '0 auto' }}>
+        <InfoLinks className="info-links--entry" />
         <div
           style={{
             display: 'flex',

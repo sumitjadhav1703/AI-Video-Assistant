@@ -1,6 +1,6 @@
 # Upgrade roadmap status
 
-Handoff reviewed November 12, 2026 for `ci/sample-stack` and [PR #4](https://github.com/sumitjadhav1703/AI-Video-Assistant/pull/4). Start with [AGENTS.md](../AGENTS.md) in `~/Projects/AI-Video-Assistant`. The current retrieval implementation uses pgvector and BM25, RRF, and mandatory FlashRank reranking. The [implementation plan](../UPGRADE_IMPLEMENTATION_PLAN.md) and [planning brief](../AI_VIDEO_ASSISTANT_CODEX_PLANNING_BRIEF.md) document the earlier design.
+Handoff updated November 13, 2026 for branch `eval/deepeval-framework` (PR to `main`). Start with [AGENTS.md](../AGENTS.md) in `~/Projects/AI-Video-Assistant`. The current retrieval implementation uses pgvector and BM25, RRF, and mandatory FlashRank reranking. The earlier implementation plan and planning brief were removed; read them with `git show dfa7e60:UPGRADE_IMPLEMENTATION_PLAN.md` and `git show dfa7e60:AI_VIDEO_ASSISTANT_CODEX_PLANNING_BRIEF.md`. Deployment follows [SUBMISSION_GUIDELINES.md](../SUBMISSION_GUIDELINES.md); results are recorded in [DEPLOYMENT_REPORT.md](../DEPLOYMENT_REPORT.md).
 
 | Workstream | Status |
 | --- | --- |

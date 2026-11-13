@@ -2,11 +2,13 @@
 
 ## Resume here
 
-- Open `~/Projects/AI-Video-Assistant`. Use `ci/sample-stack` for [PR #4](https://github.com/sumitjadhav1703/AI-Video-Assistant/pull/4) while it is open. Start with `git status --short --branch` and check the PR head and CI before making changes.
-- Read [roadmap status](docs/ROADMAP_STATUS.md) for measured results and pending gates. Use the [operator guide](docs/HYBRID_IMPLEMENTATION.md#local-setup) for disposable PostgreSQL with pgvector and verified provider configuration. The [sample deployment runbook](docs/SAMPLE_DEPLOYMENT.md) covers the separate hosted release.
-- Preview Minutes at `http://127.0.0.1:5173/`. The standalone `/sample` uses prepared results and citations. The [browser test commands](docs/RECRUITER_DEMO.md#local-browser-checks) exercise the live-flow UI with intercepted requests. The API and CLI require verified provider accounts before live calls.
-- Next, verify native AMD64 validation and the exact-image OS scan for the PR head. Verify free access for each configured account before an authorized synthetic live smoke test. Representative evaluation and hosted release checks follow. Keep the hosted stack in sample mode until its separate gates are cleared.
-- Keep the existing `.env` private. Local evidence is in `output/handoff-verification/`. The retired checkouts are preserved locally in `output/local-checkout-archive/retired-checkouts.tar.gz`. Git ignores both.
+- Open `~/Projects/AI-Video-Assistant`. Work happens on `eval/deepeval-framework`, which has a PR open to `main`. Start with `git status --short --branch`, then check the PR head and CI before making changes.
+- **Deployment state lives in two files.** [SUBMISSION_GUIDELINES.md](SUBMISSION_GUIDELINES.md) is the step-by-step chain a deployment agent (Cursor with Render, Vercel, Neon and Cloudflare MCPs) follows. [DEPLOYMENT_REPORT.md](DEPLOYMENT_REPORT.md) is what that agent filled in: URLs, service IDs, env var names set, each step's result and any errors. Read the report first when resuming after a deployment.
+- Done on this branch: DeepEval evaluation ([evaluation report](evaluation/EVALUATION_REPORT.md)), the embedding fallback chain (Gemini, then Cloudflare Qwen, then the Nemotron routes, which are off on Render), the `/eval`, `/usage` and `/pipeline` pages (the old `/sample` page is removed and now serves the home page), the backend `GET /usage` endpoint, and the [engineering story](docs/engineering-story/README.md). The parked v2 RAG pipeline is in [future-improvements/v2-rag-pipeline](future-improvements/v2-rag-pipeline/README.md); none of it runs in the app.
+- Read [roadmap status](docs/ROADMAP_STATUS.md) for measured results and pending gates. Use the [operator guide](docs/HYBRID_IMPLEMENTATION.md#local-setup) for disposable PostgreSQL with pgvector and verified provider configuration.
+- Preview Minutes at `http://127.0.0.1:5173/` (plus `/eval`, `/usage`, `/pipeline`). The API and CLI need verified provider accounts before live calls.
+- Next: merge the PR, deploy with the guide, then clear the hosted gates: proxy attribution on Render (one shared proxy IP would let a single upload use every visitor's daily allowance), a native AMD64 run on the merged head, and recovery of a stuck processing slot after a restart (`python -m backend.recover`).
+- Keep the existing `.env` private. Local evidence is in `output/` (git-ignored; it contains secret-like strings, so never share or commit it).
 
 ## Project Structure & Module Organization
 
@@ -14,8 +16,8 @@
 - `backend/core/` contains transcription, summarization, extraction, RAG, and vector storage. `backend/utils/audio_processor.py` handles media acquisition, streaming chunks, and temporary-file cleanup.
 - `web/src/` contains the React app, reusable `components/`, shared `lib/` helpers, and `styles.css`. Keep backend requests in `web/src/api.js`.
 - `web/public/demo-clips/` holds the bundled recordings for the upload picker. `mcp-server/` contains the separate Cloudflare Worker.
-- `Dockerfile` and `render.yaml` configure backend hosting; `web/vercel.json` configures frontend hosting. `.github/workflows/cleanup.yml` schedules data cleanup.
-- `tests/` contains offline Python regression tests and opt-in local PostgreSQL tests. `web/src/api.test.js` tests frontend API error handling.
+- `Dockerfile` and `render.yaml` configure backend hosting; `web/vercel.json` configures frontend hosting. `.github/workflows/cleanup.yml` schedules data cleanup; `release.yml` deploys from `main` only when `DEPLOY_SAMPLE_STACK` is `true` (leave it unset while deploying manually with the guide).
+- `tests/` contains offline Python regression tests and opt-in local PostgreSQL tests. `web/src/api.test.js` and `web/src/lib/parse.test.js` are the frontend unit tests (`npm test`). `web/tests/pages.browser.mjs` and `web/tests/live-session.browser.mjs` are Playwright browser checks. `evaluation/` holds the DeepEval framework and its reports.
 
 ## Build, Test, and Development Commands
 
@@ -45,7 +47,7 @@ History uses prefixes such as `feat:`, `fix:`, `docs:`, and `ci:` with concise i
 
 Use `.env.example` templates. Keep credentials, cookies, transcripts, and private evidence out of Git. Preserve job/vector isolation and temporary-file cleanup. Use a development database for cleanup tests. Get explicit authorization for future pushes, merges, deployments, production migrations, and live provider calls.
 
-Remote provider calls default disabled. Do not enable them or add paid fallback without verifying free-only account access. Preserve durable usage counters and token-owned active slots; never reset them to bypass limits. Read `UPGRADE_IMPLEMENTATION_PLAN.md` before broader architecture changes.
+Remote provider calls default disabled. Do not enable them or add paid fallback without verifying free-only account access. Preserve durable usage counters and token-owned active slots; never reset them to bypass limits. Read [docs/engineering-story/README.md](docs/engineering-story/README.md) before broader architecture changes. The earlier plan was removed; read it with `git show dfa7e60:UPGRADE_IMPLEMENTATION_PLAN.md`.
 
 ## Sub-Agent Coordination & Tools
 
