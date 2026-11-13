@@ -1,252 +1,156 @@
 <div align="center">
 
-# 🎬 AI Video Assistant
+# Minutes: AI Video Assistant
 
-**Turn recordings into transcripts, findings, and answers with timestamped citations.**
+**Upload a short recording. Get a transcript, title, summary, action items, decisions and open questions, then ask questions and get answers with timestamped, verified quotes.**
+
+[Live app](https://ai-video-assistant-silk.vercel.app) · [Evaluation](https://ai-video-assistant-silk.vercel.app/eval) · [Usage and limits](https://ai-video-assistant-silk.vercel.app/usage) · [How it works](https://ai-video-assistant-silk.vercel.app/pipeline)
 
 [![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://react.dev/)
 [![Vercel](https://img.shields.io/badge/Vercel-000000?style=for-the-badge&logo=vercel&logoColor=white)](https://vercel.com/)
-[![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=for-the-badge)](https://docs.langchain.com/)
+[![Render](https://img.shields.io/badge/Render-46E3B7?style=for-the-badge&logo=render&logoColor=black)](https://render.com/)
 [![Neon](https://img.shields.io/badge/Neon-00E599?style=for-the-badge&logo=postgresql&logoColor=black)](https://neon.tech/)
+[![Cloudflare](https://img.shields.io/badge/Cloudflare_Workers-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
 
 </div>
 
-AI Video Assistant transcribes uploaded clips, extracts findings, and answers questions using the transcript. The React/Vite frontend runs on Vercel and the FastAPI backend runs on Render.
+## Live deployment
 
-Minutes opens at `/`. Upload an English clip or pick a bundled demo video. Results show chat beside the summary and findings on desktop, chat first on mobile, and a collapsed transcript below. Links above the upload area open `/eval` (every evaluation run, with a per-question explorer), `/usage` (today's remaining allowance, models and measured tokens) and `/pipeline` (an animated walk-through of processing and chat). Live analysis supports invited and public access and is disabled in sample mode. See the [recruiter demo guide](docs/RECRUITER_DEMO.md) for configuration, verification, and release gates.
+| Part | Where | Plan |
+|---|---|---|
+| Web app (React + Vite) | [ai-video-assistant-silk.vercel.app](https://ai-video-assistant-silk.vercel.app) | Vercel Hobby |
+| API (FastAPI, Docker) | `https://ai-video-assistant-api-sg.onrender.com` (Singapore) | Render Free, 512 MiB |
+| Database | Neon Postgres + pgvector, AWS Singapore | Neon Free |
+| MCP server (read-only) | `https://ai-video-assistant-mcp.jadhavsumit534.workers.dev/mcp` | Cloudflare Workers Free |
 
-For the engineering decisions, bottlenecks, experiments and measured results behind the project, read the [engineering story](docs/engineering-story/README.md).
+The app is in **public** mode on free model tiers, so everyone shares a small daily allowance (below). The backend sleeps after about 15 idle minutes; the first request then takes 30–60 s while it wakes. Measured live numbers are in [docs/LIVE_PERFORMANCE.md](docs/LIVE_PERFORMANCE.md); how it was deployed is in [DEPLOYMENT_REPORT.md](DEPLOYMENT_REPORT.md).
 
-For handoff, open `~/Projects/AI-Video-Assistant` and start with [AGENTS.md](AGENTS.md). To deploy, follow [SUBMISSION_GUIDELINES.md](SUBMISSION_GUIDELINES.md); the deployment result is recorded in [DEPLOYMENT_REPORT.md](DEPLOYMENT_REPORT.md).
+## What it does
 
-## Local hybrid retrieval upgrade
+- **Analyses a recording.** MP3, WAV, MP4 or MOV up to 25 MiB; the first 10 minutes are used. Three demo clips are built in.
+- **Writes notes.** Title, summary, action items, key decisions and open questions.
+- **Answers questions with evidence.** Every answer quotes the transcript word for word with its time range. If no passage supports an answer, it says it could not find it instead of guessing.
+- **Explains itself.** [`/eval`](https://ai-video-assistant-silk.vercel.app/eval) shows every evaluation result with a per-question explorer, [`/usage`](https://ai-video-assistant-silk.vercel.app/usage) shows your remaining allowance and the models in use, and [`/pipeline`](https://ai-video-assistant-silk.vercel.app/pipeline) animates the whole pipeline step by step.
+- **Exposes shared recordings to AI assistants** through a read-only MCP server (4 tools, bearer-token protected).
 
-New jobs use timestamped, sanitized chunks. Dense pgvector and BM25 retrieve ten candidates each. RRF merges the rankings and a required local TinyBERT cross-encoder reranks up to twelve candidates before selecting four passages for cited chat. The generation gateway uses LangChain and LiteLLM. See the [implementation and operator guide](docs/HYBRID_IMPLEMENTATION.md) and [roadmap status](docs/ROADMAP_STATUS.md) for verified behavior and remaining release gates.
+## Architecture
 
-## Local safety controls
+```mermaid
+flowchart LR
+  subgraph Browser["Browser (Vercel)"]
+    UI["React SPA<br/>upload, poll, chat"]
+  end
+  subgraph API["FastAPI on Render (Docker, 512 MiB)"]
+    ADM["Admission:<br/>quotas + job token"]
+    FF["ffmpeg<br/>16 kHz mono pieces"]
+    STT["Speech to text<br/>Groq, Gemini fallback"]
+    CH["Timestamped<br/>500-char chunks"]
+    NOTES["Title, summary,<br/>findings (LiteLLM)"]
+    EMB["Embeddings<br/>Gemini, Cloudflare fallback"]
+    RET["Dense + BM25<br/>RRF, TinyBERT rerank"]
+    ANS["Cited answer<br/>+ quote check"]
+  end
+  DB[("Neon Postgres<br/>+ pgvector")]
+  MCP["MCP Worker<br/>(Cloudflare)"]
+  UI --> ADM --> FF --> STT --> CH --> NOTES --> EMB --> DB
+  UI -->|question| RET --> ANS --> UI
+  DB --> RET
+  MCP -->|Hyperdrive, read-only views| DB
+```
 
-The current checkout includes admission controls. [Roadmap status](docs/ROADMAP_STATUS.md) records the remaining release gates and [the architecture review](docs/reviews/architecture-review.md) covers design limitations.
+- **Processing** runs as a background task. The browser polls `GET /jobs/{id}` until the steps `audio → transcript → title → summary → extract → rag` finish.
+- **Chat** retrieves 10 passages by meaning (pgvector) and 10 by keywords (BM25), merges them with Reciprocal Rank Fusion, reranks the top 12 with a local TinyBERT cross-encoder, and sends the best 4 to one model. The model must return JSON with an exact quote for each claim; one invalid quote rejects the answer and the next free model is tried.
+- **Models** are chains of free routes with automatic fallback. Paid routes are never used for visitors. Details: [operator guide](docs/HYBRID_IMPLEMENTATION.md).
 
-Remote inference defaults to **off** (`ENABLE_PROVIDER_CALLS=false`). Verify free entitlements and billing controls for the exact STT, generation, and embedding routes before enabling it. Configure private `RATE_LIMIT_SECRET` and `JOB_TOKEN_SECRET` values. Live demo requests use English file uploads. Indexing can fall back to another verified embedding provider on a transient failure and then pins the successful route for chat.
+## Quality and performance
 
-Default policy:
+| Measure | Result | Source |
+|---|---|---|
+| Faithfulness (judge: answers supported by retrieved text) | 1.000 on 32 answers | [Evaluation report](evaluation/EVALUATION_REPORT.md) |
+| Answer relevancy | 0.986 | same |
+| Citation validity | 56/56 exact quotes | same |
+| Refused unanswerable questions | 6/6, no wrong refusals | same |
+| Retrieval recall@4 | 0.977 | same |
+| Question latency (local, warm) | p50 2.1 s, p95 5.1 s | same |
+| Memory peak under 512 MiB / 0.1 CPU limit | 425.0 MiB (was 465.2) | [Audit performance notes](docs/engineering-audit/performance-and-optimization.md) |
+| Live: cold start / warm API / page load | see [LIVE_PERFORMANCE](docs/LIVE_PERFORMANCE.md) | measured on the deployment |
+
+The evaluation used one public-domain talk with 45 questions; see the report for its limits.
+
+## Usage limits
+
+Free model tiers are shared, so limits are strict and enforced in Postgres (they survive restarts):
 
 | Work | Limit |
 |---|---|
-| Clip submissions | 1 per client and 5 globally per UTC day |
-| Media | 25 MiB upload; the first 10 minutes are analysed |
-| Chat | 2 per client/minute, 3 per job/day, 15 globally/day |
-| Concurrent work | One processing job and one chat request globally |
-| Text | 1,000-character question, 40,000-character transcript, 1,024 output tokens per generation |
+| Analyses | 1 per visitor and 5 across all visitors per UTC day |
+| Questions | 2 per minute and 15 per day per visitor, 3 per recording, 15 site-wide |
+| Concurrency | One analysis and one question at a time, site-wide |
+| Media | 25 MiB; first 10 minutes analysed |
 
-Postgres counters survive restarts and job deletion. Failed admitted work consumes allowance. Rejected admission rolls back counters. `429` includes `Retry-After`. Limiter, database, and configuration failures return `503` before inference. Clients on the same IP share quota, and the global cap applies across IPs. Status, results, chat, and deletion require a separate job-bound bearer token that expires after 48 hours.
+Over-limit requests get `429` with `Retry-After`. A rejected request never consumes allowance; an accepted request that later fails does. Visitors are identified by connection address, never by forwarded headers.
 
-The server uses the connection address, never arbitrary forwarded headers. Verify trusted reverse-proxy configuration before public enablement; otherwise clients may share a proxy bucket. Keep the global ceiling enabled. No production account settings or schemas were changed by these local edits.
+## Run it locally
 
-### Tests and local-only development
-
-Use Python 3.11 in a virtual environment. Install `backend/requirements.lock`, then run `PYTHON_DOTENV_DISABLED=1 python -m unittest discover -s tests -v`. Set `TEST_DATABASE_URL` to a disposable loopback PostgreSQL database with pgvector to run the database suite. In `web/`, use Node 22 or 24, then run `npm ci`, `npm test`, and `npm run build`. Tests mock providers. Point `VITE_BACKEND_URL` at `http://127.0.0.1:8000` during development.
-
-### Interrupted jobs and recovery
-
-Closing a tab leaves processing in progress. A refresh in the same tab resumes the status view. Explicit deletion during active work returns `409`. Explicit deletion and scheduled cleanup remove the job, chunks, and vector collection in one transaction. They skip active jobs and preserve usage counters.
-
-Uncertain processing or chat work retains its reservation. Stop all old workers and suspend admissions before using `python -m backend.recover inspect` in a private terminal. The [recovery runbook](docs/ROADMAP_STATUS.md#recovery-after-an-interrupted-process) describes the 30-minute minimum age and exact owner-token check. Recovery marks an active job `interrupted` and preserves its consumed quotas. Users retry by starting a new analysis.
-
----
-
-## 🏗️ Architecture Flow
-
-```mermaid
-flowchart TD
-    %% Styling
-    classDef frontend fill:#FF4B4B,stroke:#333,stroke-width:2px,color:#fff,rx:5px,ry:5px
-    classDef backend fill:#005571,stroke:#333,stroke-width:2px,color:#fff,rx:5px,ry:5px
-    classDef external fill:#2c3e50,stroke:#333,stroke-width:2px,color:#fff,rx:5px,ry:5px
-    classDef database fill:#00E599,stroke:#333,stroke-width:2px,color:#000,rx:5px,ry:5px
-    classDef apiEndpoint fill:#f39c12,stroke:#333,stroke-width:2px,color:#fff,rx:5px,ry:5px
-
-    %% Nodes
-    subgraph Frontend_App ["📱 React Frontend · Vercel"]
-        direction TB
-        UI["🖥️ User Interface"]:::frontend
-        Chat["💬 RAG Chat Interface"]:::frontend
-    end
-
-    subgraph Backend_App ["⚙️ FastAPI Backend"]
-        direction TB
-        API_Start["🚀 POST /jobs"]:::apiEndpoint
-        API_Status["⏳ GET /jobs/{id}"]:::apiEndpoint
-        API_Result["✅ GET /jobs/{id}/result"]:::apiEndpoint
-        API_Chat["💬 POST /jobs/{id}/chat"]:::apiEndpoint
-
-        Gateway["🔌 API Gateway"]:::backend
-        JobManager["📋 Job Manager"]:::backend
-        AudioProc["🎵 Audio Processor"]:::backend
-        Transcriber["✍️ Transcriber"]:::backend
-        LLMEngine["🧠 LLM Engine"]:::backend
-        RAGEngine["🔍 RAG Engine"]:::backend
-    end
-
-    subgraph External_Services ["🌐 External APIs & Services"]
-        direction TB
-        Groq["⚡ Groq API (English)"]:::external
-        Embeddings["Configured free embedding route"]:::external
-        LiteLLM["LiteLLM (approved free generation route)"]:::external
-        Neon[("🐘 Neon Postgres (pgvector)")]:::database
-    end
-
-    %% Connections
-    UI -->|"Upload clip"| API_Start
-    UI -->|"Poll Status"| API_Status
-    UI -->|"Fetch Results"| API_Result
-    Chat -->|"Ask Question"| API_Chat
-
-    API_Start --> Gateway
-    API_Status --> Gateway
-    API_Result --> Gateway
-    API_Chat --> Gateway
-
-    Gateway --> JobManager
-    JobManager --> AudioProc
-    JobManager --> Transcriber
-    JobManager --> LLMEngine
-    JobManager --> RAGEngine
-
-    Transcriber -.->|"Whisper"| Groq
-    LLMEngine -.->|"Summarize/Extract"| LiteLLM
-    RAGEngine -.->|"Embeddings"| Embeddings
-    RAGEngine -.->|"Grounded answer"| LiteLLM
-    JobManager -->|"Status/Results"| Neon
-    RAGEngine <-->|"Vector Chunks"| Neon
-```
-
----
-
-## ✨ Features
-
-- **Evaluation, usage and pipeline pages:** See the evaluation results, token usage and an animated pipeline explainer; evaluation and pipeline work without the backend.
-- **Live clip analysis:** Upload a short English audio or video file for transcription and analysis when live access is enabled.
-- **Automated Insights:** Automatically generates a suitable title, comprehensive summary, action items, key decisions, and open questions.
-- **Hybrid RAG chat:** Ask about a recording and see citations with source time ranges.
-- **Isolated Jobs:** Every job receives isolated processing and isolated vector storage to prevent context contamination.
-
----
-
-## 🛠️ Technology Stack
-
-### Backend
-- **Framework:** FastAPI, Uvicorn
-- **Audio Processing:** yt-dlp, streaming FFmpeg, pydub
-- **AI/LLM:** LangChain LCEL, LiteLLM, verified free embedding routes, Groq and optional Sarvam STT, BM25, FlashRank and ONNX Runtime
-- **Database & Vectors:** Neon (Serverless Postgres), pgvector, SQLAlchemy
-
-### Frontend
-- **Framework:** React 18 + Vite (static SPA)
-- **Hosting:** Vercel
-- **Backend calls:** `fetch` to the FastAPI service; dev uses a Vite proxy so local development works without a CORS change
-
----
-
-## ⚙️ Prerequisites
-
-Local offline tests need Python 3.11 and the backend lockfile. Running the API needs a PostgreSQL database with pgvector. Provider-backed processing additionally needs prepared reranker assets and the explicitly verified free profiles described in the [operator guide](docs/HYBRID_IMPLEMENTATION.md).
-
-*Note: For the backend to process audio, `ffmpeg` must be installed on your system. Docker handles this natively.*
-
----
-
-## 🚀 Setup & Installation
-
-### 1. Environment Configuration
-
-Copy the example environment file and fill in your actual credentials.
-**Never commit your `.env` file to version control.**
+Prerequisites: Python 3.11, Node 22 or 24, `ffmpeg`, and PostgreSQL with pgvector ([setup](docs/HYBRID_IMPLEMENTATION.md#local-setup)).
 
 ```bash
-test -f .env || cp .env.example .env
-```
-
-Ensure `.env` contains:
-- `DATABASE_URL`
-- `LLM_ROUTES_JSON`, `STT_PROFILES_JSON`, `EMBEDDING_ROUTES_JSON` and provider keys after account verification. See the [local PostgreSQL and provider setup](docs/HYBRID_IMPLEMENTATION.md#local-setup).
-- `FRONTEND_ORIGIN` (Optional for local dev, needed for production CORS)
-- `MAX_UPLOAD_MB` (optional, defaults to `25`; the ceiling is 25 MiB)
-- `ENABLE_PROVIDER_CALLS`, `RATE_LIMIT_SECRET`, and the quota controls documented above (see `.env.example`)
-- `DEMO_LIVE_MODE` (defaults to `sample`), `JOB_TOKEN_SECRET` for live mode, and `DEMO_INVITE_CODE` for invited mode
-- `MAX_MEDIA_SECONDS` (optional, defaults to `600`; longer recordings are trimmed to this ceiling of ten minutes)
-- `ADMIN_TOKEN` (Optional — enables the token-gated `/admin/cleanup` endpoint; unset means the endpoint stays disabled)
-
-### 2. Backend setup
-
-For a native development server, follow the [loopback PostgreSQL setup](docs/HYBRID_IMPLEMENTATION.md#local-setup) and run the commands below from the repository root. Install `ffmpeg` separately.
-
-```bash
+cp -n .env.example .env          # then fill in DATABASE_URL and provider settings
 python3.11 -m venv .venv
 .venv/bin/python -m pip install -r backend/requirements.lock
 .venv/bin/python scripts/prepare_reranker.py
 .venv/bin/python -m uvicorn backend.api:app --host 127.0.0.1 --port 8000 --reload --no-access-log
 ```
 
-The Docker image includes `ffmpeg` and the reranker. For a containerized development server, configure `DATABASE_URL` with a database hostname reachable from inside the container. The loopback DSN from the native setup points to the backend container itself when used in Docker.
-
 ```bash
-# Build the Docker image
-docker build -t ai-video-backend .
-
-# Run the container (reads from your .env file)
-docker run -p 127.0.0.1:8000:8000 --env-file .env ai-video-backend
+cd web && npm ci && npm run dev -- --host 127.0.0.1    # http://127.0.0.1:5173
 ```
 
-### 3. Frontend Setup
+`--no-access-log` matters: access logs would record bearer job IDs. Provider calls are **off** by default (`ENABLE_PROVIDER_CALLS=false`); turn them on only with verified free-tier keys. The Docker image (`docker build -t ai-video-backend .`) bundles `ffmpeg` and the reranker.
 
-In a separate terminal, install and run the React frontend.
+Key settings (full list in [`.env.example`](.env.example)): `DATABASE_URL`, `DEMO_LIVE_MODE` (`sample` default, `invited`, `public`), `ENABLE_PROVIDER_CALLS`, `JOB_TOKEN_SECRET` and `RATE_LIMIT_SECRET` (32+ characters), `LLM_ROUTES_JSON`, `STT_PROFILES_JSON`, `EMBEDDING_ROUTES_JSON`, `FRONTEND_ORIGIN` (exact origin, no trailing slash), `ADMIN_TOKEN`.
 
-```bash
-cd web
-npm ci
-npm run dev -- --host 127.0.0.1
-```
-
-Open `http://127.0.0.1:5173/`, `/eval`, `/usage` or `/pipeline`. Vite proxies API calls to `http://localhost:8000` by default. Set `VITE_BACKEND_URL=http://127.0.0.1:8000` in `web/.env` to use an IPv4 loopback backend explicitly. See `web/.env.example`.
-
----
-
-## ☁️ Deployment Strategy
-
-Use the [sample deployment runbook](docs/SAMPLE_DEPLOYMENT.md) for Render, Vercel, Neon, Cloudflare, and GitHub setup. Native AMD64 workload and exact-image scan results gate the sample deployment. Provider account checks gate live inference separately.
-
-- **Backend:** The existing **Render Free** service runs FastAPI using the provided `Dockerfile`. It processes uploads in background tasks after admission.
-- **Frontend:** Deploy the `web/` React app to **Vercel** — import the repo, set **Root Directory** to `web` (framework auto-detects as Vite), and add **`VITE_BACKEND_URL`** = the backend URL. Then add the resulting Vercel origin to the backend's `FRONTEND_ORIGIN` (comma-separated, **no trailing slash**) so CORS admits it.
-- **Database:** **Neon** Serverless Postgres perfectly handles the relational states and vector storage via `pgvector`.
-- **Scheduled cleanup:** A GitHub Actions workflow (`.github/workflows/cleanup.yml`) calls `POST /admin/cleanup?older_than_days=1` daily. Its `ADMIN_TOKEN` repository secret must match the backend secret.
-
----
-
-## 🗑️ Data Lifecycle
-
-Job transcripts, summaries, findings, and vectors live in Neon until explicit deletion or scheduled cleanup.
-
-- **New session** deletes the previous job, transcript chunks, and vector collection. Closing or refreshing the tab leaves the job available.
-- **Scheduled cleanup** sweeps eligible terminal jobs 24 hours after their last update. It skips jobs with active work.
-
-To purge on demand, call the endpoint directly (never commit the token or paste it in chat):
+## Tests
 
 ```bash
-curl -X POST "https://<backend-url>/admin/cleanup?older_than_days=1" \
-  -H "X-Admin-Token: $ADMIN_TOKEN"
-# → {"deleted": N, "older_than_days": 1}
+PYTHON_DOTENV_DISABLED=1 .venv/bin/python -m unittest discover -s tests -v   # backend, providers mocked
+cd web && npm test && npm run build                                           # frontend
+node --test scripts/release_vercel.test.mjs                                  # release script
 ```
 
-`older_than_days=0` purges eligible inactive jobs; active work is excluded. Returns `503` if `ADMIN_TOKEN` is unset, `401` on a bad token.
+Database tests run when `TEST_DATABASE_URL` points at a disposable loopback Postgres with pgvector. CI also builds the Docker image, runs the suite inside it, enforces a 512 MiB / 0.1 CPU workload gate, scans the image with Trivy, and runs Playwright checks of `/eval`, `/usage` and `/pipeline` ([`ci.yml`](.github/workflows/ci.yml)). To time a deployment end to end: `python scripts/measure_live.py <backend_url> <clip>` (uses one real analysis).
 
----
+## Deployment
 
-## ⚠️ Known Limitations & Notes
+Deployment follows [SUBMISSION_GUIDELINES.md](SUBMISSION_GUIDELINES.md): Neon → Render → Vercel → CORS → public mode → daily cleanup → MCP Worker, with an error playbook and rollback steps. The current deployment's IDs, settings (names only) and results are in [DEPLOYMENT_REPORT.md](DEPLOYMENT_REPORT.md). A GitHub Actions release path also exists ([SAMPLE_DEPLOYMENT.md](docs/SAMPLE_DEPLOYMENT.md)); it stays off while the stack is managed manually.
 
-- **Cold starts:** Render's free tier sleeps the backend after 15 minutes idle; the first request afterwards takes up to ~60s. The frontend surfaces this as a "waking up" message rather than an error.
-- **Memory:** Audio is decoded and chunked in a single streaming `ffmpeg` pass (`-vn -ac 1 -ar 16000 -f segment`), so memory stays flat regardless of length. This replaced an in-memory `pydub` path that loaded the whole file's PCM into RAM twice and exceeded Render's 512MB limit on long uploads.
-- **Upload cap:** A request-body limit runs before multipart parsing with bounded overhead. The route also verifies the file size and duration. The frontend blocks files above 25 MiB before upload and warns when only the first 10 minutes will be analysed.
-- **Ephemeral Storage:** Audio files are heavily chunked to fit API payload limits (e.g., Groq's 25MB cap) and are immediately deleted post-transcription. No raw audio is persistently stored.
-- **CORS:** `FRONTEND_ORIGIN` must be the exact origin with **no trailing slash** — browsers never send one, so a trailing slash silently blocks every request.
+## Data and privacy
+
+- Transcripts, notes and vectors stay in Neon until the visitor starts a new session, deletes the job, or the daily cleanup removes jobs older than 1 day. Uploaded audio is deleted right after transcription.
+- Emails, phone numbers, card numbers and API-key-like strings are masked before anything is stored or sent to a model.
+- Each job's vectors are isolated; status, results, chat and delete need a job-bound bearer token valid for 48 hours.
+- Logs record sizes, counts and timings only, never transcript or answer text.
+- Manual cleanup: `curl -X POST "$BACKEND_URL/admin/cleanup?older_than_days=1" -H "X-Admin-Token: $ADMIN_TOKEN"`.
+
+## Known limitations
+
+- **Cold starts** on Render Free: 30–60 s after idle.
+- **Shared allowance:** if Render's proxy hides visitor addresses, all visitors share one identity, so one upload can use the daily per-visitor allowance for everyone (open issue in [DEPLOYMENT_REPORT.md](DEPLOYMENT_REPORT.md)).
+- **Over-limit uploads** are rejected only after the file has been received, so a visitor who is out of allowance still waits for the upload.
+- **Restarts:** a job running during a Render restart is lost and can hold the processing slot until an operator runs `python -m backend.recover` ([runbook](docs/ROADMAP_STATUS.md#recovery-after-an-interrupted-process)).
+- **English uploads only** in the live app; YouTube links work only from the CLI.
+- **No streaming:** answers arrive in one response.
+
+## Documentation
+
+| Read this | For |
+|---|---|
+| [docs/LIVE_PERFORMANCE.md](docs/LIVE_PERFORMANCE.md) | Measured timings on the live deployment and improvement ideas |
+| [docs/engineering-story/](docs/engineering-story/README.md) | Architecture decisions, bottlenecks, experiments, benchmarks, cost |
+| [evaluation/EVALUATION_REPORT.md](evaluation/EVALUATION_REPORT.md) | DeepEval results, failure analysis, latency and cost |
+| [docs/HYBRID_IMPLEMENTATION.md](docs/HYBRID_IMPLEMENTATION.md) | Operator guide: providers, routes, local Postgres |
+| [docs/ROADMAP_STATUS.md](docs/ROADMAP_STATUS.md) | Status, open gates, recovery runbook |
+| [docs/mcp-cloudflare/](docs/mcp-cloudflare/README.md) | MCP Worker design, security and deployment |
+| [SUBMISSION_GUIDELINES.md](SUBMISSION_GUIDELINES.md) · [DEPLOYMENT_REPORT.md](DEPLOYMENT_REPORT.md) | How to deploy, and what was deployed |
+| [AGENTS.md](AGENTS.md) · [CLAUDE.md](CLAUDE.md) | Contributor and coding-agent guide |

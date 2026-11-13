@@ -58,7 +58,7 @@ Sources: [`backend/core/llm_gateway.py`](../../backend/core/llm_gateway.py):225 
 | Alternatives | A small direct adapter was the plan's first recommendation, adding LiteLLM only after a security review, because LiteLLM had two documented supply-chain incidents (`UPGRADE_IMPLEMENTATION_PLAN.md` (removed; read with `git show dfa7e60:UPGRADE_IMPLEMENTATION_PLAN.md`):"Technology decisions"). The implementation later used LiteLLM; the code builds Routers with telemetry and callbacks disabled. Mistral: rejected for billing. Sarvam as default: rejected, finite signup credit (plan). NVIDIA Nemotron on Render: rejected, NVIDIA trial terms ([`HYBRID_IMPLEMENTATION.md`](../HYBRID_IMPLEMENTATION.md):57,85). |
 | Cost / resources | $0 provider spend in the evaluation ([`EVALUATION_REPORT.md`](../../evaluation/EVALUATION_REPORT.md) section 5). Cost of LiteLLM: its first import took about 55 s at 0.1 CPU and consumed the 60 s deadline; audit 2 moved the import into preflight (title stage 58.6 s to 10.6 s) ([`performance-and-optimization.md`](../engineering-audit/performance-and-optimization.md):14-28, [`audit README`](../engineering-audit/README.md)). |
 | Trade-offs | Failover tail: first-attempt answers p50 1,944 ms versus 4,729 ms when failover was needed (n=5). Groq uses a fixed OpenAI-compatible endpoint because LiteLLM's native Groq adapter could fail on a missing `service_tier` ([`HYBRID_IMPLEMENTATION.md`](../HYBRID_IMPLEMENTATION.md):89). |
-| Status | Implemented. Live behaviour on hosted accounts not verified. |
+| Status | Implemented and deployed (Render, public mode, free routes; [DEPLOYMENT_REPORT](../../DEPLOYMENT_REPORT.md)). Live per-route latency: pending ([LIVE_PERFORMANCE](../LIVE_PERFORMANCE.md)). |
 
 ## 4. Neon Postgres + pgvector
 
@@ -146,7 +146,7 @@ Sources: [`backend/core/llm_gateway.py`](../../backend/core/llm_gateway.py):225 
 | Alternatives | No alternative documented in the files read. |
 | Cost / resources | Workers Free: 100,000 requests/day, 10 ms CPU, 128 MB; Hyperdrive Free: 100,000 queries/day (public limits, account entitlement unverified; [`cost-and-limitations.md`](../mcp-cloudflare/cost-and-limitations.md)). |
 | Trade-offs | Static bearer header only; a Hyperdrive or Neon wake-up adds latency (not measured). |
-| Status | Implemented as a separate deploy; local runtime tests and a Wrangler dry run (1,440 KiB bundle) only; hosted checks pending. |
+| Status | Implemented as a separate deploy; local runtime tests and a Wrangler dry run (1,440 KiB bundle); deployed to Cloudflare with a passing smoke test ([DEPLOYMENT_REPORT](../../DEPLOYMENT_REPORT.md)); unauthenticated round trip 0.31–1.16 s ([LIVE_PERFORMANCE](../LIVE_PERFORMANCE.md)). |
 
 ## 12. DeepEval (evaluation)
 

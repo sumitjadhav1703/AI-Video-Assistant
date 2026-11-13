@@ -98,7 +98,7 @@ FROM provider_attempts WHERE job_id = '<job id>' ORDER BY id;
 
 | Measurement | Value | Env | Tag |
 | --- | --- | --- | --- |
-| Time from client to server over a real network | Not measured | n/a | Not measured |
+| Time from client to server over a real network | Live API, mobile hotspot client: `/ready` p50 0.32 s, p95 0.44 s (n=10); cold start 32.5 s; a refused 733,251-byte upload took 25.3 s ([LIVE_PERFORMANCE](../LIVE_PERFORMANCE.md)) | n/a | Measured once, 2026-11-13 |
 | Server job time to result, 120 s clip, loopback, mocked providers: first / overlapping / warm | 4.218 s / 0.381 s / 0.336 s | C | Measured |
 | Same, Linux ARM64 at 0.1 CPU (audit 1) | 19.468 s / 5.081 s / 2.724 s | B | Measured |
 | Same, 12 Nov gate (cold / warm) | 70.30 s / 13.20 s | D | Measured |
@@ -179,7 +179,7 @@ Other: 21 s clip rerank 11 ms and 3 ms (J). FlashRank cold load 0.098 s, warm 0.
 | Chat per question, warm (n=40) | p50 2,085, p95 5,128, p99 7,946, mean 2,557, max 9,474 ms | K |
 | Chat including cold (n=43) | p50 2,211, p95 5,068 ms | K |
 | 21 s clip, analysis time to result | 6,187 ms (J); 8.1 s (I) | J, I |
-| Hosted Render / Vercel path from a real browser | Not measured | |
+| Hosted Render / Vercel path from a real browser | Vercel first visit: first paint 500–580 ms, 96 KB JS; repeat visit 144–164 ms; app's `/usage` call 257 ms first, 145 ms repeat ([LIVE_PERFORMANCE](../LIVE_PERFORMANCE.md)) | Full pipeline from the browser still pending |
 
 **Two separate 21 s runs.** Run I ([LOCAL_RUN_CHECK](../LOCAL_RUN_CHECK.md)) took 8.1 s and run J ([usage_measurement.json](../usage_measurement.json)) took 6,187 ms. Both are 21 s synthetic clips on the production image at 512 MiB, but they are different runs on different routes and the sources do not explain the 1.9 s gap. They are not averaged. Stage sums: run J itemises 5,895 ms of 6,187 ms (my sum; 292 ms is not itemised); run I itemises about 8.05 s of 8.1 s.
 
@@ -196,7 +196,7 @@ Other: 21 s clip rerank 11 ms and 3 ms (J). FlashRank cold load 0.098 s, warm 0.
 | Container peak, 21 s clip, real providers | about 327 MiB of 512 MiB | I |
 | FlashRank process RSS / full-service import RSS | 274,120,704 B / 466,157,568 B (about 444.6 MiB) | F |
 | BGE-small experiment process peak RSS | 326.3 MiB | G |
-| Hosted Render RSS | Not measured | |
+| Hosted Render RSS | Pending: read from Render Metrics during the live pipeline run ([LIVE_PERFORMANCE](../LIVE_PERFORMANCE.md)) | |
 
 The 365.96 MiB (D, 12 Nov, 213 tests) and 465.2 MiB (A, original image from `6ac48a2`) figures are on different code and different runs. The sources do not reconcile them; do not read one as an improvement over the other.
 
@@ -246,9 +246,9 @@ xychart-beta
 
 | Gap | Why it is empty | Procedure |
 | --- | --- | --- |
-| Upload duration over a real network | All upload timings are loopback or server-side | After approval and with the 1-job-per-IP-per-day quota in mind, run `curl -o /dev/null -w '%{time_total} %{size_upload}\n' -F file=@clip.mp4 -F demo_acknowledged=true https://<backend>/jobs` (form fields from the benchmark script), from the network under test. Server-side `metric=upload_body` and `metric=upload_copy` log lines give body read and copy times. |
+| Upload duration over a real network | Partly measured: one refused 733,251-byte upload took 25.3 s end to end on a mobile hotspot, because the body is read before the quota check ([LIVE_PERFORMANCE](../LIVE_PERFORMANCE.md)); accepted-upload timing pending | After approval and with the 1-job-per-IP-per-day quota in mind, run `curl -o /dev/null -w '%{time_total} %{size_upload}\n' -F file=@clip.mp4 -F demo_acknowledged=true https://<backend>/jobs` (form fields from the benchmark script), from the network under test. Server-side `metric=upload_body` and `metric=upload_copy` log lines give body read and copy times. |
 | Real-media compression ratio | Only synthetic clips measured | Run the browser experiment with licensed real speech video (commands in [BROWSER_MEDIA_EXPERIMENT](../BROWSER_MEDIA_EXPERIMENT.md)) and compare bytes. |
-| Hosted Render RSS and CPU | No hosted run | During an approved synthetic smoke test, read Render's memory/CPU metrics. Offline proxy: the gate in 1.1. |
+| Hosted Render RSS and CPU | Stack is deployed; reading pending the live pipeline run ([LIVE_PERFORMANCE](../LIVE_PERFORMANCE.md)) | During an approved synthetic smoke test, read Render's memory/CPU metrics. Offline proxy: the gate in 1.1. |
 | Native AMD64 gate on current head | CI results not in repo | Read the Actions artifacts for the run on the head commit (`gh run view`, read-only), then quote them. Pending per [ROADMAP_STATUS](../ROADMAP_STATUS.md). |
 | Single-query embedding latency at scale | Eval batched all queries | Time `embed_batch(route, [q], query=True)` per question from `provider_attempts.elapsed_ms`. |
 | Per-stage time on real long media | Longest real clips are 21 s and a 13.5 min talk (index only) | Approved upload of a 10 min clip; read `metric=stage` lines. |

@@ -126,7 +126,7 @@ Full reasoning, alternatives and trade-offs: [architecture-and-decisions.md](arc
 | SSE / streaming | | | | | Yes |
 | Browser preprocessing | | | | yes, rejected | |
 | YouTube | CLI only | | | | Live API (URLs rejected) |
-| MCP Worker | yes | local runtime tests, Wrangler dry run | Hosted checks | | |
+| MCP Worker | yes | local runtime tests, Wrangler dry run; deployed, smoke test passed (401 without token, 4 tools, list_videos) per [DEPLOYMENT_REPORT](../../DEPLOYMENT_REPORT.md) | Authenticated tool latency | | |
 | DeepEval | yes (v1) | report | Multi-source goldens, human review | | |
 
 Sources: [`docs/ROADMAP_STATUS.md`](../ROADMAP_STATUS.md), [`docs/engineering-audit/remaining-issues.md`](../engineering-audit/remaining-issues.md), [`evaluation/EVALUATION_REPORT.md`](../../evaluation/EVALUATION_REPORT.md), [`docs/UPGRADE_VALIDATION.md`](../UPGRADE_VALIDATION.md).
