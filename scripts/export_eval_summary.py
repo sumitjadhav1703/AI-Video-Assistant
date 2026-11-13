@@ -5,7 +5,6 @@ Run from the repository root with the evaluation venv:
 Writes web/src/data/evaluation.json. Only summary numbers and short excerpts are exported, no raw provider payloads.
 """
 import json
-import statistics
 import sys
 from pathlib import Path
 
