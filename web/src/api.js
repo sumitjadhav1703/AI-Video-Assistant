@@ -66,6 +66,13 @@ async function callBackend(method, path, { body, headers, signal, valid, timeout
 
 export const getDemoMode = (signal) => callBackend('GET', '/demo-mode', { signal });
 
+// Public limits, models and what this visitor has left today (no secrets).
+export const getUsage = (signal) => callBackend('GET', '/usage', {
+  signal,
+  timeout: 20000,
+  valid: (p) => p && typeof p.limits === 'object' && typeof p.models === 'object',
+});
+
 export function startJob({ file, inviteCode, language = 'english' }) {
   const form = new FormData();
   form.append('file', file, file.name);

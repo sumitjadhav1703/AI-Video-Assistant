@@ -335,6 +335,58 @@ def get_demo_mode():
     return {'mode': 'sample'}
 
 
+def _public_models():
+    """Model names per task as a public visitor gets them. Aliases and model ids only, never keys."""
+    from .core.audio_budget import profiles_for_language
+    from .core.embedding_routes import configured_embedding_routes
+    from .core.llm_gateway import TASKS, _eligible, _routes, _task_order
+    public = {'owner': False, 'allow_paid': False, 'local_owner': False}
+    try:
+        routes = [route for route in _routes() if _eligible(route, public)]
+    except (ValueError, RuntimeError):
+        routes = []
+    try:
+        embeddings = [{'route': r.alias, 'provider': r.provider, 'model': r.model, 'dimension': r.dimension}
+                      for r in configured_embedding_routes() if r.available()]
+    except (ValueError, RuntimeError):
+        embeddings = []
+    try:
+        speech = [{'provider': p.provider, 'model': p.model} for p in profiles_for_language('english')]
+    except (ValueError, RuntimeError):
+        speech = []
+    return {'generation': {task: [{'route': r.alias, 'provider': r.provider, 'model': r.model, 'free': r.verified_free}
+                                  for r in _task_order(task, routes)] for task in TASKS},
+            'embeddings': embeddings, 'speech_to_text': speech}
+
+
+@app.get('/usage')
+def usage(request: Request):
+    """Public limits, models and what this visitor has left today. Contains no secrets or other visitors' data."""
+    try:
+        settings = Settings.from_env()
+    except ValueError:
+        raise HTTPException(503, _UNAVAILABLE) from None
+    mode = get_demo_mode()['mode']
+    limits = {'analyses_per_visitor_day': settings.jobs_per_ip_day, 'analyses_all_visitors_day': settings.jobs_global_day,
+              'chats_per_visitor_minute': settings.chats_per_ip_minute, 'chats_per_visitor_day': settings.chats_per_ip_day,
+              'chats_per_session_day': settings.chats_per_job_day, 'chats_all_visitors_day': settings.chats_global_day,
+              'max_upload_mib': settings.max_upload_bytes // (1024 * 1024)}
+    body = {'mode': mode, 'limits': limits, 'models': _public_models(), 'remaining': None, 'resets_at': None}
+    if mode == 'sample':
+        return body
+    snapshot = _database_call(db.usage_snapshot, _identity(request, settings))
+    used = snapshot['used']
+    body['remaining'] = {
+        'analyses_today': max(0, min(settings.jobs_per_ip_day - used['jobs_ip_day'],
+                                     settings.jobs_global_day - used['jobs_global_day'])),
+        'chats_today': max(0, min(settings.chats_per_ip_day - used['chats_ip_day'],
+                                  settings.chats_global_day - used['chats_global_day'])),
+        'chats_this_minute': max(0, settings.chats_per_ip_minute - used['chats_ip_minute']),
+    }
+    body['resets_at'] = snapshot['resets_at']
+    return body
+
+
 @app.post('/jobs')
 async def create_job(
     request: Request,

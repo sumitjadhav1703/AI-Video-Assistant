@@ -123,7 +123,7 @@ jobs:
         working-directory: web
         env:
           VITE_BACKEND_URL: https://sample-fixture.invalid
-      - name: Verify the prepared sample with the backend blocked
+      - name: Verify the info pages with the backend blocked
         working-directory: web
         env:
           AVA_BACKEND_TEST_URL: https://sample-fixture.invalid
@@ -140,7 +140,7 @@ jobs:
             kill -0 "$preview_pid"
             sleep 1
           done
-          node tests/sample.browser.mjs
+          node tests/pages.browser.mjs
 
   mcp:
     name: MCP tests, types and Worker bundle

@@ -319,6 +319,24 @@ def _reserve(cur, slot: str, job_id: str, identity: str, settings: Settings) -> 
     return token
 
 
+def usage_snapshot(identity: str) -> dict:
+    """Read-only view of today's admission counters for one client and globally (UTC, database clock)."""
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT clock_timestamp() AS now")
+        now = cur.fetchone()['now'].astimezone(timezone.utc)
+        day = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        minute = now.replace(second=0, microsecond=0)
+        used = {}
+        for bucket, scope, subject in ((day, 'jobs_ip_day', identity), (day, 'jobs_global_day', '*'),
+                                       (minute, 'chats_ip_minute', identity), (day, 'chats_ip_day', identity),
+                                       (day, 'chats_global_day', '*')):
+            cur.execute("SELECT count FROM usage_counters WHERE bucket=%s AND scope=%s AND subject=%s",
+                        (bucket, scope, subject))
+            row = cur.fetchone()
+            used[scope] = row['count'] if row else 0
+        return {'used': used, 'resets_at': (day + timedelta(days=1)).isoformat()}
+
+
 def admit_job(job_id: str, language: str, identity: str, settings: Settings) -> str:
     with connect() as conn, conn.cursor() as cur:
         _lock_admission(cur)

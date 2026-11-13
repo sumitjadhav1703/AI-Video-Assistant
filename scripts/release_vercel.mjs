@@ -49,7 +49,7 @@ export async function checkVercelDeployment(settings, request = fetch) {
   return result.id;
 }
 
-export async function checkSampleRouting(settings, request = fetch) {
+export async function checkReleaseRouting(settings, request = fetch) {
   const webOrigin = httpsOrigin(settings.webUrl);
   const backend = httpsOrigin(settings.renderUrl);
   const release = await request(webOrigin + '/_ava-release.json', { ...requestOptions(), cache: 'no-store' });
@@ -81,10 +81,10 @@ if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
       if (process.env.GITHUB_STEP_SUMMARY) {
         appendFileSync(process.env.GITHUB_STEP_SUMMARY, `- Vercel deployment \`${id}\` for \`${settings.sha}\`.\n`);
       }
-      await checkSampleRouting(settings);
+      await checkReleaseRouting(settings);
     }
   } catch {
-    console.error('Vercel deployment or sample routing verification failed.');
+    console.error('Vercel deployment or release routing verification failed.');
     process.exitCode = 1;
   }
 }

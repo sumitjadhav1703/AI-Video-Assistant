@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { checkVercelDeployment, checkSampleRouting, checkVercelTarget } from './release_vercel.mjs';
+import { checkVercelDeployment, checkReleaseRouting, checkVercelTarget } from './release_vercel.mjs';
 
 const sha = 'a'.repeat(40);
 const deployment = { id: 'dpl_sample', projectId: 'prj_sample', readyState: 'READY',
@@ -42,10 +42,10 @@ test('stable site serves the tested SHA and Render allows the exact production o
     assert.equal(options.headers.Origin, settings.webUrl);
     return new Response(null, { headers: { 'Access-Control-Allow-Origin': settings.webUrl } });
   };
-  await checkSampleRouting(settings, request);
+  await checkReleaseRouting(settings, request);
   assert.equal(calls.length, 2);
-  await assert.rejects(checkSampleRouting(settings, async () => Response.json({ sha: 'b'.repeat(40) })));
-  await assert.rejects(checkSampleRouting(settings, async (url) => url.endsWith('.json')
+  await assert.rejects(checkReleaseRouting(settings, async () => Response.json({ sha: 'b'.repeat(40) })));
+  await assert.rejects(checkReleaseRouting(settings, async (url) => url.endsWith('.json')
     ? Response.json({ sha })
     : new Response(null, { headers: { 'Access-Control-Allow-Origin': '*' } })));
 });

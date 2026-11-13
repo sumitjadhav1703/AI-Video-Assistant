@@ -6,7 +6,7 @@ function formatTime(ms) {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 
-export default function Chat({ chat, onAsk, presetQuestions, onSeek }) {
+export default function Chat({ chat, onAsk }) {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false);
@@ -29,7 +29,7 @@ export default function Chat({ chat, onAsk, presetQuestions, onSeek }) {
   };
 
   return (
-    <section className="results-chat" aria-label={presetQuestions ? 'Try a sample question' : 'Ask the meeting'}>
+    <section className="results-chat" aria-label="Ask the meeting">
       <div
         style={{
           animation: 'fadeUp .9s cubic-bezier(.22,1,.36,1) .35s both',
@@ -46,25 +46,10 @@ export default function Chat({ chat, onAsk, presetQuestions, onSeek }) {
         }}
       >
         <h2 className="results-chat-heading">
-          {presetQuestions ? 'Try a sample question' : 'Ask the meeting'}
+          Ask the meeting
         </h2>
         <div style={{ maxWidth: 760 }}>
-          {presetQuestions && (
-            <div className="demo-sample-questions">
-              {presetQuestions.map((question) => (
-                <button
-                  type="button"
-                  key={question}
-                  className="demo-sample-control"
-                  aria-pressed={chat[0]?.q === question}
-                  onClick={() => onAsk(question)}
-                >
-                  {question}
-                </button>
-              ))}
-            </div>
-          )}
-          {!presetQuestions && chat.length === 0 && (
+          {chat.length === 0 && (
             <p
               style={{
                 margin: '0 0 var(--chat-intro-gap, 34px)',
@@ -84,12 +69,10 @@ export default function Chat({ chat, onAsk, presetQuestions, onSeek }) {
               const abstained = !msg.pending && msg.abstained === true;
               return (
               <div key={msg.id} className="chat-turn">
-                {!presetQuestions && (
-                  <div className="chat-q">
-                    <span className="chat-q-label">You asked</span>
-                    <p className="chat-q-text">{msg.q}</p>
-                  </div>
-                )}
+                <div className="chat-q">
+                  <span className="chat-q-label">You asked</span>
+                  <p className="chat-q-text">{msg.q}</p>
+                </div>
                 <div className={`chat-a${abstained ? ' chat-a-abstained' : ''}${msg.error ? ' chat-a-error' : ''}`}>
                   {msg.pending ? (
                     <span style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.05em', color: MUTE, animation: 'pulseDot 1.2s ease infinite' }}>
@@ -109,10 +92,7 @@ export default function Chat({ chat, onAsk, presetQuestions, onSeek }) {
                         const range = timed
                           ? `${citation.timing_precision === 'piece' ? '~' : ''}${formatTime(citation.start_ms)}${citation.end_ms == null ? '' : `–${formatTime(citation.end_ms)}`}`
                           : null;
-                        let chip = range && <span className="chat-chip">{range}</span>;
-                        if (timed && onSeek) {
-                          chip = <button type="button" className="chat-chip" aria-label={`Jump to ${range}`} onClick={() => onSeek(citation.start_ms)}>{range}</button>;
-                        }
+                        const chip = range && <span className="chat-chip">{range}</span>;
                         return (
                           <div key={`${citation.chunk_id}-${index}`} className="chat-cite">
                             {chip}
@@ -128,7 +108,7 @@ export default function Chat({ chat, onAsk, presetQuestions, onSeek }) {
             })}
           </div>
 
-          {!presetQuestions && <>
+          <>
             <div className="chat-compose" style={{ borderTop: '1px solid rgba(232,229,222,0.10)', paddingTop: 'var(--chat-compose-gutter, 28px)' }}>
               <input
                 data-hov="1"
@@ -179,7 +159,7 @@ export default function Chat({ chat, onAsk, presetQuestions, onSeek }) {
               </button>
             </div>
             {tooLong && <p role="status" className="chat-a-hint">This question is too long. Shorten it to ask.</p>}
-          </>}
+          </>
         </div>
       </div>
     </section>

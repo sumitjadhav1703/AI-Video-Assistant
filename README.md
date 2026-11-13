@@ -14,7 +14,7 @@
 
 AI Video Assistant transcribes uploaded clips, extracts findings, and answers questions using the transcript. The React/Vite frontend runs on Vercel and the FastAPI backend runs on Render.
 
-Minutes opens at `/`. Upload an English clip or pick a bundled demo video. Results show chat beside the summary and findings on desktop, chat first on mobile, and a collapsed transcript below. The offline recruiter demo at `/sample` includes prepared answers and seekable citations. Live analysis supports invited and public access and is disabled in sample mode. See the [recruiter demo guide](docs/RECRUITER_DEMO.md) for configuration, verification, and release gates.
+Minutes opens at `/`. Upload an English clip or pick a bundled demo video. Results show chat beside the summary and findings on desktop, chat first on mobile, and a collapsed transcript below. Links above the upload area open `/eval` (every evaluation run, with a per-question explorer), `/usage` (today's remaining allowance, models and measured tokens) and `/pipeline` (an animated walk-through of processing and chat). Live analysis supports invited and public access and is disabled in sample mode. See the [recruiter demo guide](docs/RECRUITER_DEMO.md) for configuration, verification, and release gates.
 
 For handoff, open `~/Projects/AI-Video-Assistant` and start with [AGENTS.md](AGENTS.md). [PR #4](https://github.com/sumitjadhav1703/AI-Video-Assistant/pull/4) tracks the pending release from `ci/sample-stack`.
 
@@ -124,7 +124,7 @@ flowchart TD
 
 ## ✨ Features
 
-- **Static sample:** Explore prepared findings and cited answers without waking the backend.
+- **Evaluation, usage and pipeline pages:** See the evaluation results, token usage and an animated pipeline explainer; evaluation and pipeline work without the backend.
 - **Live clip analysis:** Upload a short English audio or video file for transcription and analysis when live access is enabled.
 - **Automated Insights:** Automatically generates a suitable title, comprehensive summary, action items, key decisions, and open questions.
 - **Hybrid RAG chat:** Ask about a recording and see citations with source time ranges.
@@ -207,7 +207,7 @@ npm ci
 npm run dev -- --host 127.0.0.1
 ```
 
-Open `http://127.0.0.1:5173/` or `http://127.0.0.1:5173/sample`. Vite proxies API calls to `http://localhost:8000` by default. Set `VITE_BACKEND_URL=http://127.0.0.1:8000` in `web/.env` to use an IPv4 loopback backend explicitly. See `web/.env.example`.
+Open `http://127.0.0.1:5173/`, `/eval`, `/usage` or `/pipeline`. Vite proxies API calls to `http://localhost:8000` by default. Set `VITE_BACKEND_URL=http://127.0.0.1:8000` in `web/.env` to use an IPv4 loopback backend explicitly. See `web/.env.example`.
 
 ---
 

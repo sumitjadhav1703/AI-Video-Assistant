@@ -60,7 +60,7 @@ builds, starts and works end to end. Everything was local, on free provider rout
      this information in the meeting transcript."
 6. **Delete session,** with the confirm dialog. Afterwards the DB had 0 jobs, 0 chunks, 0 vectors and
    0 collections. Provider-attempt history was kept by design.
-7. **`/sample`** rendered the prepared sample: questions, summary and findings.
+7. **`/eval`, `/usage`, `/pipeline`** rendered; `/usage` showed live remaining counts that dropped after a job. `/sample` was removed and now serves the home page.
 
 **Resource and cost:**
 - Container memory peaked at about **327 MiB of 512 MiB** during the run.
