@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 AI Video Assistant ("Minutes"): upload a short English clip, get transcript, title, summary, findings, and hybrid-RAG chat with timestamped citations. FastAPI backend (Render, Docker), React/Vite SPA (Vercel), Neon Postgres + pgvector, and a separate read-only MCP Cloudflare Worker.
 
-Before starting, read [AGENTS.md](AGENTS.md) "Resume here" and [docs/ROADMAP_STATUS.md](docs/ROADMAP_STATUS.md) for current branch, open PR, and pending release gates. Read [UPGRADE_IMPLEMENTATION_PLAN.md](UPGRADE_IMPLEMENTATION_PLAN.md) before broader architecture changes. AGENTS.md names Codex models (Sol/Terra/Astra); ignore those, the orchestration rules below replace them for Claude Code.
+Before starting, read [AGENTS.md](AGENTS.md) "Resume here" and [docs/ROADMAP_STATUS.md](docs/ROADMAP_STATUS.md) for current branch, open PR, and pending release gates. Read [docs/engineering-story/README.md](docs/engineering-story/README.md) for architecture decisions before broader changes, and [SUBMISSION_GUIDELINES.md](SUBMISSION_GUIDELINES.md) plus [DEPLOYMENT_REPORT.md](DEPLOYMENT_REPORT.md) for deployment state. AGENTS.md names Codex models (Sol/Terra/Astra); ignore those, the orchestration rules below replace them for Claude Code.
 
 ## Hard rules
 

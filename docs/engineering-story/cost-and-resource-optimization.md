@@ -22,7 +22,7 @@ Purpose: the cost and resource constraints this project runs under, the choices 
 | Vercel Hobby frontend | Static `web/` build | [RECRUITER_DEMO release order](../RECRUITER_DEMO.md) |
 | Neon Free Postgres + pgvector | Autosuspends. Public pricing lists 100 compute-unit hours per month and 1 GB storage per project; the account's actual allowance is unverified | [cost-and-limitations](../mcp-cloudflare/cost-and-limitations.md) |
 | Cloudflare Workers Free (MCP worker) | 100,000 requests/day per account, 10 ms CPU and 128 MB per request; Hyperdrive Free 100,000 queries/day | [cost-and-limitations](../mcp-cloudflare/cost-and-limitations.md) |
-| No paid Redis, queue or monitoring | Quotas, slots and cooldowns live in Postgres; telemetry is log lines only; jobs run as FastAPI `BackgroundTasks` | [`telemetry.py`](../../backend/core/telemetry.py), [UPGRADE_IMPLEMENTATION_PLAN](../../UPGRADE_IMPLEMENTATION_PLAN.md) (rejected: Redis, worker, Elasticsearch, separate vector DB) |
+| No paid Redis, queue or monitoring | Quotas, slots and cooldowns live in Postgres; telemetry is log lines only; jobs run as FastAPI `BackgroundTasks` | [`telemetry.py`](../../backend/core/telemetry.py), UPGRADE_IMPLEMENTATION_PLAN (removed; read with `git show dfa7e60:UPGRADE_IMPLEMENTATION_PLAN.md`) (rejected: Redis, worker, Elasticsearch, separate vector DB) |
 | No automatic paid fallback | Paid route is opt-in per request and capped (section 4) | [`audio_budget.py:67-79`](../../backend/core/audio_budget.py), [`provider_budget.py:131-150`](../../backend/core/provider_budget.py) |
 | No accidental spending | `ENABLE_PROVIDER_CALLS` defaults to false; every route needs an explicit `verified_free` attestation | [`usage_limits.py`](../../backend/usage_limits.py) |
 
@@ -35,11 +35,11 @@ Free-plan limits for Render, Vercel and Neon are public pricing, not account-ver
 | Component | Where | Why (source) | Status |
 | --- | --- | --- | --- |
 | Reranker (FlashRank TinyBERT) | Local, in the backend | Needs no provider quota and no network; about 8 ms p50 per question; process RSS 274,120,704 B in isolation ([BENCHMARK_NOTES](../BENCHMARK_NOTES.md)). Cost: memory on a 512 MiB instance. | Implemented, Verified |
-| BM25 | Local, in memory, rebuilt per query | Replaced Postgres FTS ([UPGRADE_IMPLEMENTATION_PLAN:3](../../UPGRADE_IMPLEMENTATION_PLAN.md)); about 1 ms p50 | Implemented, Verified |
+| BM25 | Local, in memory, rebuilt per query | Replaced Postgres FTS (UPGRADE_IMPLEMENTATION_PLAN:3 (removed; read with `git show dfa7e60:UPGRADE_IMPLEMENTATION_PLAN.md`)); about 1 ms p50 | Implemented, Verified |
 | Speech to text | Remote free tiers (Groq, Gemini, Sarvam for Hinglish) | Original local Whisper + torch stack was estimated at "~2GB against Render's 512MB free tier" in a code comment, not a measurement (`git show 29eddf7:backend/requirements.txt`, line 3) | Implemented |
 | LLM generation | Remote free tiers (Gemini, Groq, OpenRouter `:free`, NVIDIA owner-only) | No local model fits the container. Mistral was dropped because its API needs billing ([HYBRID_IMPLEMENTATION:85](../HYBRID_IMPLEMENTATION.md)) | Implemented |
 | Embeddings | Remote free tiers (Gemini, Cloudflare Qwen3; Nemotron routes disabled on Render) | Local BGE-small was measured (326.3 MiB experiment peak RSS, no hosting benchmark) and kept offline | Implemented; local: Experimental |
-| Sarvam as default Hinglish route | Rejected as default; gated by `ENABLE_SARVAM` | Finite credit ([UPGRADE_IMPLEMENTATION_PLAN:73](../../UPGRADE_IMPLEMENTATION_PLAN.md)) | Implemented (gated) |
+| Sarvam as default Hinglish route | Rejected as default; gated by `ENABLE_SARVAM` | Finite credit (UPGRADE_IMPLEMENTATION_PLAN:73 (removed; read with `git show dfa7e60:UPGRADE_IMPLEMENTATION_PLAN.md`)) | Implemented (gated) |
 | YouTube download | CLI only | YouTube blocks datacenter IPs; proxy and cookie workarounds were rejected on cost and fragility (`git show 3934fa3:README.md`) | CLI only |
 
 ---
@@ -203,7 +203,7 @@ Omitted on purpose: any dollar figure for Render, Vercel, Neon or paid providers
 ## Sources
 
 - [`backend/usage_limits.py`](../../backend/usage_limits.py), [`backend/core/provider_budget.py`](../../backend/core/provider_budget.py), [`backend/core/audio_budget.py`](../../backend/core/audio_budget.py), [`backend/core/llm_gateway.py`](../../backend/core/llm_gateway.py), [`backend/core/transcriber.py`](../../backend/core/transcriber.py), [`backend/core/telemetry.py`](../../backend/core/telemetry.py)
-- [`render.yaml`](../../render.yaml), [`UPGRADE_IMPLEMENTATION_PLAN.md`](../../UPGRADE_IMPLEMENTATION_PLAN.md)
+- [`render.yaml`](../../render.yaml), `UPGRADE_IMPLEMENTATION_PLAN.md` (removed; read with `git show dfa7e60:UPGRADE_IMPLEMENTATION_PLAN.md`)
 - [`docs/engineering-audit/performance-and-optimization.md`](../engineering-audit/performance-and-optimization.md), [`docs/engineering-audit/bugs-and-fixes.md`](../engineering-audit/bugs-and-fixes.md)
 - [`docs/usage_measurement.json`](../usage_measurement.json), [`docs/LOCAL_RUN_CHECK.md`](../LOCAL_RUN_CHECK.md), [`docs/HYBRID_IMPLEMENTATION.md`](../HYBRID_IMPLEMENTATION.md), [`docs/RECRUITER_DEMO.md`](../RECRUITER_DEMO.md), [`docs/ROADMAP_STATUS.md`](../ROADMAP_STATUS.md), [`docs/BENCHMARK_NOTES.md`](../BENCHMARK_NOTES.md), [`docs/BROWSER_MEDIA_EXPERIMENT.md`](../BROWSER_MEDIA_EXPERIMENT.md)
 - [`docs/mcp-cloudflare/cost-and-limitations.md`](../mcp-cloudflare/cost-and-limitations.md)

@@ -1,6 +1,6 @@
 # Recruiter demo
 
-The original Minutes workspace opens at `/` and checks live availability. The static recruiter demo at `/sample` includes a synthetic clip, prepared findings, two cited answers and an abstention example. Opening the sample requires only the frontend assets.
+The original Minutes workspace opens at `/` and checks live availability. The `/eval`, `/usage` and `/pipeline` pages explain the evaluation, usage limits and pipeline; `/eval` and `/pipeline` need only the frontend assets. The old static `/sample` demo was removed.
 
 Live results show chat beside the summary and findings on desktop and above them on mobile. The full transcript is collapsed at the bottom. Use **New session** to delete the current job and start another.
 
@@ -30,10 +30,10 @@ Start Vite on `127.0.0.1:5173` with a local backend target. From the repository 
 export AVA_FRONTEND_TEST_URL=http://127.0.0.1:5173
 export AVA_BACKEND_TEST_URL=https://sample-fixture.invalid
 node web/tests/live-session.browser.mjs
-node web/tests/sample.browser.mjs
+node web/tests/pages.browser.mjs
 ```
 
-The live-session check supplies mock API responses. The sample check blocks backend requests and verifies timestamp seeking.
+The live-session check supplies mock API responses. The pages check blocks backend requests and verifies `/eval`, `/usage` and `/pipeline`, and that `/sample` now serves the home page.
 
 ## Offline workload check
 

@@ -171,11 +171,11 @@ Source: `git log --format='%h %ad %s' --date=short` on this branch (full list ha
 
 - `AGENTS.md`, `docs/ROADMAP_STATUS.md` and `docs/RECRUITER_DEMO.md` still mention the removed `/sample` flow and PR #4; the latest commit `6b1b29b` replaced `/sample`.
 - `docs/BENCHMARK_NOTES.md`:38 says the Linux gates have not been run; later docs record Linux runs.
-- Demo limits: `UPGRADE_IMPLEMENTATION_PLAN.md` lists 2 jobs/client/day and 10 globally; code defaults are 1 and 5 ([`backend/usage_limits.py`](../../backend/usage_limits.py):42-48). Code wins. `render.yaml` sets `CHATS_PER_IP_DAY` to 15 while the code ceiling is 20.
+- Demo limits: `UPGRADE_IMPLEMENTATION_PLAN.md` (removed; `git show dfa7e60:UPGRADE_IMPLEMENTATION_PLAN.md`) lists 2 jobs/client/day and 10 globally; code defaults are 1 and 5 ([`backend/usage_limits.py`](../../backend/usage_limits.py):42-48). Code wins. `render.yaml` sets `CHATS_PER_IP_DAY` to 15 while the code ceiling is 20.
 
 ## Sources
 
-- [`UPGRADE_IMPLEMENTATION_PLAN.md`](../../UPGRADE_IMPLEMENTATION_PLAN.md), [`docs/HYBRID_IMPLEMENTATION.md`](../HYBRID_IMPLEMENTATION.md), [`docs/reviews/architecture-review.md`](../reviews/architecture-review.md)
+- `UPGRADE_IMPLEMENTATION_PLAN.md` (removed; read with `git show dfa7e60:UPGRADE_IMPLEMENTATION_PLAN.md`), [`docs/HYBRID_IMPLEMENTATION.md`](../HYBRID_IMPLEMENTATION.md), [`docs/reviews/architecture-review.md`](../reviews/architecture-review.md)
 - [`docs/engineering-audit/`](../engineering-audit/README.md): README, performance-and-optimization, remaining-issues
 - [`docs/mcp-cloudflare/`](../mcp-cloudflare/README.md)
 - [`evaluation/EVALUATION_REPORT.md`](../../evaluation/EVALUATION_REPORT.md)

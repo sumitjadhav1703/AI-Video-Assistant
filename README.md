@@ -18,7 +18,7 @@ Minutes opens at `/`. Upload an English clip or pick a bundled demo video. Resul
 
 For the engineering decisions, bottlenecks, experiments and measured results behind the project, read the [engineering story](docs/engineering-story/README.md).
 
-For handoff, open `~/Projects/AI-Video-Assistant` and start with [AGENTS.md](AGENTS.md). [PR #4](https://github.com/sumitjadhav1703/AI-Video-Assistant/pull/4) tracks the pending release from `ci/sample-stack`.
+For handoff, open `~/Projects/AI-Video-Assistant` and start with [AGENTS.md](AGENTS.md). To deploy, follow [SUBMISSION_GUIDELINES.md](SUBMISSION_GUIDELINES.md); the deployment result is recorded in [DEPLOYMENT_REPORT.md](DEPLOYMENT_REPORT.md).
 
 ## Local hybrid retrieval upgrade
 
