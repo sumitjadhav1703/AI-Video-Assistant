@@ -28,7 +28,7 @@ The app is in **public** mode on free model tiers, so everyone shares a small da
 
 ## What it does
 
-- **Analyses a recording.** MP3, WAV, MP4 or MOV up to 25 MiB; the first 10 minutes are used. Three demo clips are built in.
+- **Analyses a recording.** Audio up to 25 MiB, or video up to 250 MiB: the browser extracts a video's audio track before upload, so only that is sent. The first 10 minutes are used. Three demo clips are built in.
 - **Writes notes.** Title, summary, action items, key decisions and open questions.
 - **Answers questions with evidence.** Every answer quotes the transcript word for word with its time range. If no passage supports an answer, it says it could not find it instead of guessing.
 - **Explains itself.** [`/eval`](https://ai-video-assistant-silk.vercel.app/eval) shows every evaluation result with a per-question explorer, [`/usage`](https://ai-video-assistant-silk.vercel.app/usage) shows your remaining allowance and the models in use, and [`/pipeline`](https://ai-video-assistant-silk.vercel.app/pipeline) animates the whole pipeline step by step.
@@ -59,7 +59,8 @@ flowchart LR
   MCP -->|Hyperdrive, read-only views| DB
 ```
 
-- **Processing** runs as a background task. The browser polls `GET /jobs/{id}` until the steps `audio → transcript → title → summary → extract → rag` finish.
+- **In the browser,** video files are decoded with the built-in Web Audio API and uploaded as 16 kHz mono WAV (the format the server converts everything to), 8× smaller than a 2 Mbps 720p video in testing. If the browser cannot decode a file, the original is uploaded.
+- **Processing** runs as a background task. The browser polls `GET /jobs/{id}` until the steps `audio → transcript → title → summary → extract → rag` finish; title, summary, findings and indexing run at the same time once the transcript is ready.
 - **Chat** retrieves 10 passages by meaning (pgvector) and 10 by keywords (BM25), merges them with Reciprocal Rank Fusion, reranks the top 12 with a local TinyBERT cross-encoder, and sends the best 4 to one model. The model must return JSON with an exact quote for each claim; one invalid quote rejects the answer and the next free model is tried.
 - **Models** are chains of free routes with automatic fallback. Paid routes are never used for visitors. Details: [operator guide](docs/HYBRID_IMPLEMENTATION.md).
 
@@ -90,7 +91,7 @@ Free model tiers are shared, so limits are strict and enforced in Postgres (they
 | Analyses | 1 per visitor and 5 across all visitors per UTC day |
 | Questions | 2 per minute and 15 per day per visitor, 3 per recording, 15 site-wide |
 | Concurrency | One analysis and one question at a time, site-wide |
-| Media | 25 MiB; first 10 minutes analysed |
+| Media | Audio 25 MiB; video up to 250 MiB, reduced to its audio in the browser; first 10 minutes analysed |
 
 Over-limit requests get `429` with `Retry-After`. A rejected request never consumes allowance; an accepted request that later fails does. Visitors are identified by connection address, never by forwarded headers.
 

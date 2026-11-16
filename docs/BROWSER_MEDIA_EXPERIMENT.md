@@ -2,6 +2,8 @@
 
 ## Update (2026-11-16): built-in browser APIs on real speech
 
+**Implemented** in [`web/src/lib/extractAudio.js`](../web/src/lib/extractAudio.js), called from the upload picker ([`Empty.jsx`](../web/src/components/Empty.jsx)): videos (and audio over 25 MiB) between 2 MiB and 250 MiB are converted to 16 kHz mono WAV, trimmed to 10 minutes, and used only when smaller; any failure uploads the original. In Chromium a 32.6 MB 2-minute 720p video with 48 kHz stereo audio became a 3.9 MB WAV upload (3,904,440-byte request), prepared in about 0.3 s. Opus is not implemented.
+
 **Finding: for video files, extracting the audio in the browser cuts the upload by 8× (WAV) to 85× (Opus) with no new dependency and no server change. The 2026-11-11 "do not enable" decision below was based on synthetic videos whose 160×90, 5 fps video track was almost as small as their audio, so it could not show this.**
 
 Live context: on the deployed stack, uploading a 733 KB clip over a mobile hotspot took 23.7 s (about 31 KB/s), 58% of the visitor's wait ([LIVE_PERFORMANCE.md](LIVE_PERFORMANCE.md)). Upload bytes, not CPU, are the bottleneck.
