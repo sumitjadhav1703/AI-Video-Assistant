@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { InfoLinks } from './InfoShell';
 import { SANS, MONO, CREAM, SUBTLE, MUTE, DIM } from '../lib/theme';
 import { humanSize } from '../lib/parse';
+import { extractAudio, shouldExtract } from '../lib/extractAudio';
 
 const ACCEPT = '.mp3,.wav,.m4a,.mp4,.mov,.mkv,.webm,.aac,.ogg,.flac';
 const HERO_WORDS = ['remembered.', 'recorded.', 'summarised.', 'answered.', 'searchable.'];
@@ -48,9 +49,12 @@ export default function Empty({ mode, languages = ['english'], submitting, onAna
   const [durationSec, setDurationSec] = useState(null);
   const [youtubeHint, setYoutubeHint] = useState(false);
   const [language, setLanguage] = useState('english');
+  const [preparing, setPreparing] = useState(false);
+  const [extracted, setExtracted] = useState(null);
   const hinglishReady = languages.includes('hinglish');
   const inputRef = useRef(null);
   const demoRequest = useRef(null);
+  const chooseToken = useRef(0);
 
   useEffect(() => {
     setDurationSec(null);
@@ -61,6 +65,9 @@ export default function Empty({ mode, languages = ['english'], submitting, onAna
   }, [file]);
 
   const clearDemo = () => {
+    chooseToken.current += 1;  // drop any audio extraction still running for an earlier file
+    setPreparing(false);
+    setExtracted(null);
     demoRequest.current?.abort();
     demoRequest.current = null;
     setLoadingDemo(null);
@@ -68,9 +75,10 @@ export default function Empty({ mode, languages = ['english'], submitting, onAna
     setDemoError('');
   };
 
-  const chooseFile = (f) => {
+  const chooseFile = async (f) => {
     if (!f || submitting) return;
     clearDemo();
+    const token = chooseToken.current;
     const ext = f.name.slice(f.name.lastIndexOf('.')).toLowerCase();
     // Drag-and-drop ignores the input's accept list, so check it here too.
     if (!ACCEPT.split(',').includes(ext) || (f.type && !/^(audio|video)\//.test(f.type))) {
@@ -79,9 +87,28 @@ export default function Empty({ mode, languages = ['english'], submitting, onAna
       if (inputRef.current) inputRef.current.value = '';
       return;
     }
+    setSizeError('');
+    if (shouldExtract(f, MAX_UPLOAD_BYTES)) {
+      // Upload only the audio the server uses; on any failure fall back to the original file below.
+      setFile(null);
+      setPreparing(true);
+      try {
+        const audio = await extractAudio(f, ANALYSED_SECONDS);
+        if (token !== chooseToken.current) return;
+        if (audio.file.size < f.size && audio.file.size <= MAX_UPLOAD_BYTES) {
+          setExtracted({ name: f.name, size: f.size, seconds: audio.seconds });
+          setFile(audio.file);
+          return;
+        }
+      } catch {
+        if (token !== chooseToken.current) return;
+      } finally {
+        if (token === chooseToken.current) setPreparing(false);
+      }
+    }
     if (f.size > MAX_UPLOAD_BYTES || f.size === 0) {
       setFile(null);
-      setSizeError(f.size ? `“${f.name}” is ${humanSize(f.size)}. Choose a file up to 25 MiB.` : 'Choose a file that contains audio.');
+      setSizeError(f.size ? `“${f.name}” is ${humanSize(f.size)}. Choose audio up to 25 MiB or video up to 250 MiB.` : 'Choose a file that contains audio.');
       if (inputRef.current) inputRef.current.value = '';
       return;
     }
@@ -93,6 +120,9 @@ export default function Empty({ mode, languages = ['english'], submitting, onAna
     demoRequest.current?.abort();
     const request = new AbortController();
     demoRequest.current = request;
+    chooseToken.current += 1;
+    setPreparing(false);
+    setExtracted(null);
     setLoadingDemo(clip);
     setDemoError('');
     const timeout = setTimeout(() => request.abort('timeout'), 20000);
@@ -138,7 +168,7 @@ export default function Empty({ mode, languages = ['english'], submitting, onAna
   const invited = mode === 'invited';
   const live = invited || mode === 'public';
   const showUploadNotice = live && file && !selectedDemo;
-  const canAnalyse = Boolean(live && !submitting && !loadingDemo && file && (!invited || inviteCode.trim()));
+  const canAnalyse = Boolean(live && !submitting && !loadingDemo && !preparing && file && (!invited || inviteCode.trim()));
 
   const submit = (event) => {
     event.preventDefault();
@@ -256,7 +286,7 @@ export default function Empty({ mode, languages = ['english'], submitting, onAna
                 Drop a recording here.
               </span>
               <span style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.05em', color: MUTE }}>
-                MP3 · WAV · MP4 · MOV — up to 25 MiB; the first 10 minutes are analysed
+                MP3 · WAV · MP4 · MOV — audio up to 25 MiB, video up to 250 MiB; the first 10 minutes are analysed
               </span>
             </button>
           ) : (
@@ -285,10 +315,11 @@ export default function Empty({ mode, languages = ['english'], submitting, onAna
                     wordBreak: 'break-word',
                   }}
                 >
-                  {selectedDemo?.title ?? file.name}
+                  {selectedDemo?.title ?? extracted?.name ?? file.name}
                 </div>
                 <div style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.1em', color: MUTE }}>
-                  {humanSize(file.size)} · {selectedDemo ? 'demo clip ready' : 'ready'}
+                  {extracted ? `audio only · ${humanSize(file.size)} instead of ${humanSize(extracted.size)} · ready`
+                    : `${humanSize(file.size)} · ${selectedDemo ? 'demo clip ready' : 'ready'}`}
                 </div>
               </div>
               <button
@@ -348,9 +379,10 @@ export default function Empty({ mode, languages = ['english'], submitting, onAna
             {demoError && <p role="alert" className="minutes-demo-status">{demoError}</p>}
           </section>
 
-          {file && durationSec > ANALYSED_SECONDS && (
+          {preparing && <p role="status" style={noteStyle}>Extracting the audio in your browser…</p>}
+          {file && (extracted?.seconds ?? durationSec) > ANALYSED_SECONDS && (
             <p role="status" style={noteStyle}>
-              This recording is {Math.round(durationSec / 60)} min. Only the first {ANALYSED_SECONDS / 60} minutes will be analysed.
+              This recording is {Math.round((extracted?.seconds ?? durationSec) / 60)} min. Only the first {ANALYSED_SECONDS / 60} minutes will be analysed.
             </p>
           )}
           {showUploadNotice && (
