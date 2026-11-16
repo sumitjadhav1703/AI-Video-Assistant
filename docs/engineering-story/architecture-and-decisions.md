@@ -104,16 +104,16 @@ Sources: [`backend/core/llm_gateway.py`](../../backend/core/llm_gateway.py):225 
 | Trade-offs | Mixed evidence. Reranker lowered MRR on the hybrid list (0.928 to 0.892) and dropped a needed passage in 2 cases (H-005, M-005). It raised recall@4 from 0.897 to 0.974 on an offline weak BM25-only list (CI [+0.026, +0.141]). In the local BGE benchmark (16 passages, 12 questions) recall@4 went 1.000 / 0.917 / 0.833 for dense / +RRF / +TinyBERT. **Benefit on real meeting audio is not shown.** |
 | Status | Implemented; Verified for latency and memory; quality benefit Not shown. |
 
-## 8. Browser-side audio preprocessing
+## 8. Browser-side audio extraction (Web Audio, implemented); ffmpeg.wasm (rejected)
 
 | | |
 |---|---|
-| Problem | Smaller uploads might save bandwidth and server work. |
-| Why selected | Not selected. Tested in isolation with ffmpeg.wasm in a Web Worker (`scripts/browser-media-experiment/index.html`). |
-| Result | Three synthetic files, one desktop Chrome, one run each: extraction 158 / 229 / 1,025 ms (30 s / 2 min / 10 min) vs native 125 / 231 / 1,039 ms. MP3 bytes versus video bytes: 180,940 vs 186,356; 720,940 vs 744,681; 3,600,868 vs 3,722,557 (about 3% smaller, computed from the table). Core wasm is 32,232,419 bytes and declares GPL-2.0-or-later. |
-| Why rejected | Little byte saving, a 32 MB core download, a GPL review needed before shipping, and no test on low-power devices, upload time or peak memory. Decision recorded 2026-11-11: "do not enable browser preprocessing" ([`BROWSER_MEDIA_EXPERIMENT.md`](../BROWSER_MEDIA_EXPERIMENT.md):3-19). The app uploads the raw `File` ([`web/src/api.js`](../../web/src/api.js):76-83). |
-| Cost / trade-offs | Would move CPU to the user's device. End-to-end upload time: **Not measured**. To measure: run the documented harness on representative speech clips over throttled network, on a low-power device, recording upload and backend times. |
-| Status | Experimental, rejected. |
+| Problem | Video uploads are mostly picture bytes the server throws away; a 2-minute 720p video at 2 Mbps (31.8 MB) was refused by the 25 MiB cap, and on a mobile link every megabyte costs seconds. |
+| Why selected | The browser's built-in `OfflineAudioContext.decodeAudioData` decodes a video's audio track and resamples it to 16 kHz; a few lines write 16-bit mono WAV, the exact format the server's ffmpeg step produces from every upload. No library, no licence review, no server change ([`web/src/lib/extractAudio.js`](../../web/src/lib/extractAudio.js), called from [`Empty.jsx`](../../web/src/components/Empty.jsx)). |
+| Result | Desktop Chromium, one run each on real speech ([`BROWSER_MEDIA_EXPERIMENT.md`](../BROWSER_MEDIA_EXPERIMENT.md), 2026-11-16 update): 1-minute 720p MP4 15,721,762 → 1,920,044 bytes; 2-minute 720p MP4 31,795,914 → 3,904,044 bytes (8.1×); decode 21–42 ms. The resulting WAV passed the server's exact `ffprobe` and `ffmpeg` commands. |
+| Alternatives | **ffmpeg.wasm in a Web Worker** (tested 2026-11-11, `scripts/browser-media-experiment/index.html`): rejected for a 32,232,419-byte GPL-2.0-or-later core and little measured saving. That test used synthetic 160×90, 5 fps videos whose picture track was almost as small as the audio (about 3% saved), so it could not show the gain on real videos. **Opus via WebCodecs `AudioEncoder`**: about 10× smaller again, but needs a container muxer, Safari 26+, and a transcription-quality check; not built. |
+| Cost / trade-offs | Applies only to videos (and audio over 25 MiB) between 2 MiB and 250 MiB, and only when the WAV is smaller; MP3s stay as they are (WAV would be 5× larger). The whole file is read into memory to decode, so very large files and phones are untested; any decode failure uploads the original. End-to-end upload time on a real network: **Not measured** for this path. |
+| Status | Web Audio extraction: Implemented (PR #9), Verified in desktop Chromium only. ffmpeg.wasm: Experimental, rejected. Opus: Not implemented. |
 
 ## 9. SSE / streaming: not built; polling with backoff
 

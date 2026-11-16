@@ -116,7 +116,7 @@ FROM provider_attempts WHERE job_id = '<job id>' ORDER BY id;
 | Server WAV chunk to FLAC, sent to Groq | WAV | about 45% smaller | Code comment, `transcriber.py:66`; no tracked artifact |
 | Real user media | Not measured | Not measured | Not measured |
 
-The app uploads the raw file; no browser compression ships. Synthetic fixtures are unusually compressible and do not predict real media.
+These rows are the rejected ffmpeg.wasm experiment. Since PR #9 the app extracts audio from videos in the browser with Web Audio instead (16 kHz mono WAV; a 2 Mbps 720p video shrinks 8.1×; [BROWSER_MEDIA_EXPERIMENT.md](../BROWSER_MEDIA_EXPERIMENT.md), 2026-11-16 update). The synthetic fixtures above are unusually compressible and do not predict real media.
 
 ### 3.3 Audio extraction
 

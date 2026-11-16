@@ -19,7 +19,7 @@ const processing = {
   steps: [
     { node: 'upload', edges: [], payload: 'project_review.mp3 · 165 KB',
       title: 'You upload a recording',
-      what: 'MP3, WAV, MP4 or MOV up to 25 MiB. The file streams to the server in pieces, so a large upload never sits in memory.',
+      what: 'Audio up to 25 MiB, or video up to 250 MiB: your browser extracts a video’s audio track first, so only that is uploaded. The file streams to the server in pieces, so a large upload never sits in memory.',
       measured: 'Instant for a 165 KB clip', fails: 'Wrong type, empty or oversized files are refused before anything is counted against your allowance.' },
     { node: 'audio', edges: [['upload', 'audio']], payload: '16 kHz mono WAV · 21 s',
       title: 'Audio is normalised',

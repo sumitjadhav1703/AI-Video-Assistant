@@ -1,5 +1,36 @@
 # Browser media preprocessing experiment
 
+## Update (2026-11-16): built-in browser APIs on real speech
+
+**Implemented** in [`web/src/lib/extractAudio.js`](../web/src/lib/extractAudio.js), called from the upload picker ([`Empty.jsx`](../web/src/components/Empty.jsx)): videos (and audio over 25 MiB) between 2 MiB and 250 MiB are converted to 16 kHz mono WAV, trimmed to 10 minutes, and used only when smaller; any failure uploads the original. In Chromium a 32.6 MB 2-minute 720p video with 48 kHz stereo audio became a 3.9 MB WAV upload (3,904,440-byte request), prepared in about 0.3 s. Opus is not implemented.
+
+**Finding: for video files, extracting the audio in the browser cuts the upload by 8× (WAV) to 85× (Opus) with no new dependency and no server change. The 2026-11-11 "do not enable" decision below was based on synthetic videos whose 160×90, 5 fps video track was almost as small as their audio, so it could not show this.**
+
+Live context: on the deployed stack, uploading a 733 KB clip over a mobile hotspot took 23.7 s (about 31 KB/s), 58% of the visitor's wait ([LIVE_PERFORMANCE.md](LIVE_PERFORMANCE.md)). Upload bytes, not CPU, are the bottleneck.
+
+**Method.** Playwright Chromium on an arm64 Mac, page served from loopback ([`scripts/browser-media-experiment/native-audio-bench.html`](../scripts/browser-media-experiment/native-audio-bench.html)). No libraries: `OfflineAudioContext(1, …, 16000).decodeAudioData()` decodes the file's audio track and resamples it to 16 kHz; a few lines write 16-bit mono WAV; WebCodecs `AudioEncoder` encodes Opus at 24 kbps (bytes counted, not muxed). Inputs: the bundled speech clip `generative-ai-explained.mp3`, and MP4s made from it with a 1280×720, 30 fps test-pattern video at 2 Mbps plus 128 kbps AAC, a typical screen- or phone-recording bitrate. One run each.
+
+| Input | Original | Browser WAV, 16 kHz mono | Browser Opus 24 kbps | Decode + resample | WAV write | Opus encode |
+|---|---:|---:|---:|---:|---:|---:|
+| 2-min MP3 speech | 733,251 B | 3,906,198 B (5.3× larger) | 372,407 B (0.51×) | 42 ms | 5 ms | 460 ms |
+| 1-min 720p MP4 | 15,721,762 B | 1,920,044 B (8.2× smaller) | 182,397 B (86× smaller) | 21 ms | 1 ms | 234 ms |
+| 2-min 720p MP4 | 31,795,914 B (over the 25 MiB cap: refused today) | 3,904,044 B (8.1× smaller) | 371,751 B (86× smaller) | 41 ms | 4 ms | 453 ms |
+
+Peak JS heap 53 MB after all three. The browser WAV made from the 2-minute MP4 passed the server's exact `ffprobe` and `ffmpeg` commands from [`backend/utils/audio_processor.py`](../backend/utils/audio_processor.py) unchanged (`pcm_s16le`, 16 kHz, mono, 122.0 s); WAV is already in the server's `INPUT_FORMATS`, and the server's own pipeline converts every upload to exactly this format, so transcription input is equivalent. Locally that ffmpeg step took 49 ms on the WAV against 69 ms on the MP4 (5-run average).
+
+**What it means at the measured mobile speed (about 31 KB/s, estimate):** a 1-minute 720p video would upload in about 1 minute as WAV instead of about 8.5 minutes; a 2-minute one becomes possible at all (about 2 minutes). Opus would bring both under 15 s and halve MP3 uploads (23.7 s to about 12 s).
+
+**Constraints found.**
+- Converting audio-only files to WAV makes them larger; only convert when the 16 kHz mono WAV (32,000 bytes per second) is smaller than the original, which is true for almost every video.
+- `decodeAudioData` reads the whole file into memory. Desktop handled 31.8 MB easily; phones and very large files are untested, so cap the input size and fall back to the original file on any failure.
+- Trim to the first 600 s in the browser (the server analyses only that much anyway); 600 s of WAV is 19.2 MB, under the 25 MiB cap.
+- Opus needs an Ogg or WebM muxer (no browser API writes containers), Safari 26+ for `AudioEncoder`, and a transcription-quality check at 24 kbps. WAV needs none of these.
+- Parallelism inside the browser buys nothing here: decoding took 21–42 ms. The cost is network bytes.
+
+Sources: [MDN WebCodecs codec selection](https://developer.mozilla.org/en-US/docs/Web/API/WebCodecs_API/Codec_selection), [caniuse: AudioEncoder Opus](https://caniuse.com/mdn-api_audioencoder_configure_opus), [MDN OfflineAudioContext](https://developer.mozilla.org/docs/Web/API/OfflineAudioContext).
+
+## Original experiment (2026-11-11)
+
 **Decision (2026-11-11): do not enable browser preprocessing.** This isolated experiment proves worker-based extraction works for three synthetic files on one desktop browser, but does not establish a user benefit or compatibility on lower-powered devices. The native streaming upload path remains the default. No app code or runtime dependencies were changed.
 
 ## Method and results

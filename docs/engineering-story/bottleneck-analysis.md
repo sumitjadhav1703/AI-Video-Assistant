@@ -12,9 +12,9 @@ Purpose: for each of 12 bottlenecks in the original application, what it did, wh
 - **Root cause.** Uploads land on Render's ephemeral disk and then feed decoding; a large file multiplies memory and time cost on a 512 MiB / free CPU instance.
 - **Evidence.** `git show 0ea372e -- backend/api.py`. Current: cap of 25 MiB, empty and oversized files rejected before they consume the daily allowance, copy loop in 1 MiB pieces ([`backend/api.py`](../../backend/api.py):38,434-454); media trimmed to the first 600 s by `ffmpeg -t` ([`audio_processor.py`](../../backend/utils/audio_processor.py):39-42,146-170).
 - **User impact.** Clips over 25 MiB are refused; longer clips are analysed only for the first 10 minutes.
-- **Solution.** Hard caps before any provider spend. Browser-side extraction was tried to shrink uploads and rejected: about 3% fewer bytes on three synthetic clips, 32 MB wasm download, GPL review needed ([`BROWSER_MEDIA_EXPERIMENT.md`](../BROWSER_MEDIA_EXPERIMENT.md):3-17).
+- **Solution.** Hard caps before any provider spend. Browser-side extraction with ffmpeg.wasm was rejected (about 3% fewer bytes on synthetic clips, 32 MB wasm, GPL review). A later Web Audio version ships: videos become 16 kHz mono WAV before upload, 8.1× smaller for a 2 Mbps 720p video, and videos over 25 MiB (up to 250 MiB) are no longer refused ([BROWSER_MEDIA_EXPERIMENT.md](../BROWSER_MEDIA_EXPERIMENT.md)).
 - **Trade-offs.** Lower caps protect free quotas but limit the demo. Actual upload time on a real connection and the compressed size of real recordings: **Not measured**. To measure: upload a licensed 20 MiB clip over throttled network and read the `upload_copy` metric (`bytes`, `elapsed_ms`) from the logs.
-- **Status.** Cap Implemented; browser preprocessing Experimental, rejected.
+- **Status.** Cap Implemented; browser audio extraction for videos Implemented (Web Audio, desktop Chromium verified); ffmpeg.wasm Experimental, rejected.
 
 ## 2. Backend audio extraction
 

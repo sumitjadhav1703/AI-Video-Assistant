@@ -50,7 +50,20 @@ How to measure the missing baseline (offline, no provider calls): build the imag
 | Result (estimated) | Byte saving is about 2.9%, 3.2% and 3.3% (my arithmetic from the three pairs above). The roadmap quotes "about 3%". |
 | Not measured | Real network upload time, backend round trip, peak browser memory, energy, low-power devices, other browsers, ASR quality, cancellation. The source states these were not tested. |
 | Trade-off | The single-thread core is GPL-2.0-or-later (compliance review needed before shipping). A 32 MB download for a ~3% saving on synthetic, unusually compressible media. |
-| Decision | **Reject (Experimental, rejected).** The doc's own decision is "do not enable browser preprocessing". Nothing in the app claims bandwidth reduction. |
+| Decision | **Reject ffmpeg.wasm (Experimental, rejected).** Superseded by the Web Audio version in 2a, which needs no library. |
+
+## 2a. Browser-side audio extraction (Web Audio)
+
+| Field | Entry |
+| --- | --- |
+| Hypothesis | Real videos are mostly picture bytes, so sending only their audio would shrink uploads far more than the synthetic test suggested, without any library. |
+| Baseline | Raw upload; videos over 25 MiB refused. |
+| Change | [`web/src/lib/extractAudio.js`](../../web/src/lib/extractAudio.js): `OfflineAudioContext.decodeAudioData` at 16 kHz, channel average, 10-minute trim, 16-bit WAV; used for videos (and audio over 25 MiB) between 2 MiB and 250 MiB, only when smaller; original uploaded on any failure. |
+| Experiment | Desktop Chromium, real speech from the bundled demo clip muxed under a 1280×720, 30 fps, 2 Mbps test video; one run each ([BROWSER_MEDIA_EXPERIMENT.md](../BROWSER_MEDIA_EXPERIMENT.md), 2026-11-16 update). |
+| Result (measured) | 31,795,914 → 3,904,044 bytes (8.1×) and 15,721,762 → 1,920,044 bytes (8.2×); decode 21–42 ms; the WAV passed the server's exact `ffprobe`/`ffmpeg` commands; Analyse sent the WAV. |
+| Not measured | Upload time on a real network, phones, Safari, Firefox, real phone recordings, very large files. |
+| Trade-off | Whole file read into memory (hence the 250 MiB cap); MP3s are left alone because WAV would be 5× larger. |
+| Decision | **Keep (Implemented, PR #9).** Opus via WebCodecs (about 10× smaller again) is a possible follow-up. |
 
 ---
 

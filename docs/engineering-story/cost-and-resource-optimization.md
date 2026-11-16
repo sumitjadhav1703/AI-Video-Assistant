@@ -118,8 +118,8 @@ In the local run check (13 Nov) paid Meta was forced off and all 8 provider atte
 
 ## 6. Upload bandwidth
 
-- The app uploads the raw file (`web/src/api.js:76-83`). The cap is 25 MiB (section 3.1). The client upload timeout was raised to 15 minutes because slow 25 MiB uploads aborted while the job was created server-side ([bugs-and-fixes F1](../engineering-audit/bugs-and-fixes.md)).
-- **No bandwidth reduction is claimed.** Browser-side compression was rejected: about 3% fewer bytes on three synthetic files, a 32,232,419-byte GPL core, no real-network test ([BROWSER_MEDIA_EXPERIMENT](../BROWSER_MEDIA_EXPERIMENT.md)).
+- Audio files upload as they are; video files (and audio over 25 MiB) between 2 MiB and 250 MiB are reduced to 16 kHz mono WAV in the browser first ([`web/src/lib/extractAudio.js`](../../web/src/lib/extractAudio.js)). The upload cap is still 25 MiB (section 3.1). The client upload timeout was raised to 15 minutes because slow 25 MiB uploads aborted while the job was created server-side ([bugs-and-fixes F1](../engineering-audit/bugs-and-fixes.md)).
+- **Measured byte reduction for videos, not yet upload time.** In desktop Chromium a 2-minute 720p video at 2 Mbps went from 31,795,914 to 3,904,044 bytes (8.1×); time saved on a real network is Not measured. The earlier ffmpeg.wasm version was rejected (about 3% fewer bytes on synthetic files, a 32,232,419-byte GPL core) ([BROWSER_MEDIA_EXPERIMENT.md](../BROWSER_MEDIA_EXPERIMENT.md)).
 - Server to Groq: chunks are sent as FLAC, which a code comment puts at about 45% smaller than WAV (`transcriber.py:66`). That saves server egress, not user upload, and has no tracked artifact.
 - Render Free bandwidth: not verified (pending gate).
 

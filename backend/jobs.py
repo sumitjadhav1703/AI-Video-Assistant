@@ -1,5 +1,8 @@
+import contextvars
 import logging
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from .utils.audio_processor import process_input, cleanup, MediaValidationError
 from .core.transcriber import transcribe_segments
@@ -29,6 +32,31 @@ _OWNER_EVALUATION_SCRIPT = (
     'The operations team will verify the rollback checklist on Friday. The support team will prepare a troubleshooting guide before the pilot starts.',
     'The team will review error counts after the first week. The support coverage for the second week is still undecided.',
 )
+
+
+def _run_stages(job_id: str, stages: dict) -> dict:
+    """Run independent stages (each reads only the transcript) at once.
+
+    Progress reports the first unfinished stage in order, so the UI still moves forward step by step.
+    Every stage finishes before this returns or raises, so cleanup never races a running stage.
+    """
+    done, lock = set(), threading.Lock()
+
+    def run(name, label, work):
+        with duration(label):
+            value = work()
+        with lock:
+            done.add(name)
+            pending = [step for step in stages if step not in done]
+            if pending:
+                db.set_step(job_id, pending[0])
+        return value
+
+    with ThreadPoolExecutor(max_workers=len(stages)) as pool:
+        # Each worker gets a copy of this context so the job's provider operation scope applies there too.
+        futures = {name: pool.submit(contextvars.copy_context().run, run, name, label, work)
+                   for name, (label, work) in stages.items()}
+    return {name: future.result() for name, future in futures.items()}
 
 
 def run_job(job_id: str, source: str | None, language: str = "english", is_upload: bool = False,
@@ -68,27 +96,20 @@ def run_job(job_id: str, source: str | None, language: str = "english", is_uploa
             preflight_processing(transcript, documents)
 
             db.set_step(job_id, "title")
-            with duration("title"):
-                title = generate_title(transcript)
-
-            db.set_step(job_id, "summary")
-            with duration("summary"):
-                summary = summarize(transcript)
-
-            db.set_step(job_id, "extract")
-            with duration("extract"):
-                findings = extract_findings(transcript)
-
-            db.set_step(job_id, "rag")
-            rag_started = True
-            with duration("embedding_indexing"):
-                build_rag_chain(transcript, job_id, documents=documents)
+            rag_started = True  # indexing starts alongside the notes, so any failure must clean up vectors
+            results = _run_stages(job_id, {
+                "title": ("title", lambda: generate_title(transcript)),
+                "summary": ("summary", lambda: summarize(transcript)),
+                "extract": ("extract", lambda: extract_findings(transcript)),
+                "rag": ("embedding_indexing", lambda: build_rag_chain(transcript, job_id, documents=documents)),
+            })
+            findings = results["extract"]
             metric("index", vectors=len(documents))
 
             db.finish_job(job_id, {
-                "title": title,
+                "title": results["title"],
                 "transcript": transcript,
-                "summary": summary,
+                "summary": results["summary"],
                 "action_items": findings["action_items"],
                 "key_decisions": findings["key_decisions"],
                 "open_questions": findings["open_questions"],
