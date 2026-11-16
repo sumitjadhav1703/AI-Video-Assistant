@@ -2,7 +2,7 @@
 
 Measured on the deployed stack, from outside, like a real visitor. The goal is to know where time goes in production and what to improve next. Local and evaluation numbers are in [engineering-story/benchmarking-and-performance.md](engineering-story/benchmarking-and-performance.md) and [EVALUATION_REPORT §6](../evaluation/EVALUATION_REPORT.md).
 
-**Status:** probes, page loads, the Worker and one full pipeline run (upload → notes → three questions) are measured. Server-side stage timings from the API logs and peak memory are still *Pending*. A first pipeline attempt on 2026-11-13 was refused with `429` (allowance already used); the run below is from 2026-11-16.
+**Status:** probes, page loads, the Worker and one full pipeline run (upload → notes → three questions) are measured. Server-side stage timings come from the API's own log lines for that run; peak memory is still *Pending*. A first pipeline attempt on 2026-11-13 was refused with `429` (allowance already used); the run below is from 2026-11-16.
 
 All numbers are single observations (n = 1 per row unless a count is given). Treat them as a first snapshot, not a benchmark.
 
@@ -63,19 +63,19 @@ First visit transfers 96,203 bytes of JavaScript and 5,477 bytes of CSS (compres
 
 ### Analysis pipeline (one run, 2026-11-16)
 
-Outside timings come from polling the job status every second, so each step boundary is accurate to about ±1 s (plus the poll round trip). The transcript was 1,557 characters, the summary 541.
+Outside timings come from polling the job status every second, so each step boundary is accurate to about ±1 s (plus the poll round trip). Where outside and server values differ (summary, findings), use the server value; the server logs come from the API's own timers ([`backend/core/telemetry.py`](../backend/core/telemetry.py)). The transcript was 1,557 characters, the summary 541.
 
 | Stage | Outside timing (status polling, ±1 s) | Server timing (logs) |
 |---|---|---|
-| Upload request (733,251-byte, ~2-minute MP3, `generative-ai-explained.mp3`) | **23.7 s** (about 31 KB/s on the mobile hotspot) | `upload_copy`: Pending |
+| Upload request (733,251-byte, ~2-minute MP3, `generative-ai-explained.mp3`) | **23.7 s** (about 31 KB/s on the mobile hotspot) | `upload_body` 1 ms (733,638 bytes), `upload_copy` 0 ms: the body was already received before the handler ran, so the 23.7 s is network transfer |
 | Queued → audio started | 0.4 s after the upload returned | — |
-| Audio (ffmpeg) | 3.2 s (0.4 → 3.6 s) | Pending |
-| Transcription | 3.6 s (3.6 → 7.2 s) | Pending |
-| Title | 3.5 s (7.2 → 10.7 s) | Pending |
-| Summary | 2.2 s (10.7 → 12.9 s) | Pending |
-| Findings | 1.3 s (12.9 → 14.2 s) | Pending |
-| Embedding + indexing | 2.8 s (14.2 → 17.0 s) | Pending |
-| Processing (upload returned → done) | **17.0 s** | `time_to_result`: Pending |
+| Audio (ffmpeg) | 3.2 s (0.4 → 3.6 s) | `media_processing` **2,671 ms**; decoded to 3,906,232 bytes of WAV in 1 piece |
+| Transcription | 3.6 s (3.6 → 7.2 s) | `transcription` **3,586 ms** for 122,068 ms of audio (19 segments → 4 chunks) |
+| Title | 3.5 s (7.2 → 10.7 s) | `title` **3,748 ms** |
+| Summary | 2.2 s (10.7 → 12.9 s) | `summary` **1,037 ms** |
+| Findings | 1.3 s (12.9 → 14.2 s) | `extract` **2,485 ms** |
+| Embedding + indexing | 2.8 s (14.2 → 17.0 s) | `embedding_indexing` **2,899 ms** (4 vectors) |
+| Processing (upload returned → done) | **17.0 s** | `time_to_result` **16,852 ms** (stages sum to 16,426 ms; ~0.4 s is database writes and bookkeeping) |
 | Total, start of upload → notes ready | **40.7 s** (upload is 58% of it) | — |
 | Fetch result (`/result`) | 0.38 s | — |
 | Status poll round trip (n=11) | p50 0.58 s, p95 1.26 s | — |
@@ -83,6 +83,8 @@ Outside timings come from polling the job status every second, so each step boun
 | Peak memory during the job (Render Metrics) | — | Pending |
 
 ### Questions (one run each, 2026-11-16)
+
+Server log per question: dense retrieval 491 / 602 / 579 ms (this includes the remote embedding call for the question), keyword search 0–1 ms, fusion 0 ms, rerank 86 / 297 / 80 ms. So retrieval is about 0.6–0.9 s of each answer and the model call plus the network is the rest (about 2.5–3.7 s).
 
 All three used the first route in the chain (no fallback). Retrieval returned 4 dense and 3–4 keyword candidates, fused to 4 (the short transcript has only a few chunks).
 
@@ -101,8 +103,9 @@ All three used the first route in the chain (no fallback). Retrieval returned 4 
 5. **The API is fast when awake.** `/ready`, which includes a database round trip to Neon in the same region, has a p50 of 0.32 s from the client, most of which is network distance from the client to Singapore.
 6. **The Worker's first call is slower** (1.16 s against about 0.3–0.5 s afterwards): the edge isolate warming up.
 7. **Upload dominates a visitor's wait.** Of 40.7 s from starting the upload to notes ready, 23.7 s (58%) was sending a 733 KB file over the mobile link; all processing took 17.0 s.
-8. **Processing is evenly spread; no single stage dominates.** Audio 3.2 s, transcription 3.6 s, title 3.5 s, summary 2.2 s, findings 1.3 s, embedding and indexing 2.8 s for a ~2-minute clip. The three note-writing calls together (7.0 s) are the largest group and run one after another.
-9. **Questions take about 3.4–4.5 s live**, against a local warm p50 of 2.1 s in the evaluation. The extra time is the first route (Gemini 2.5 Flash) plus the network distance to the client. The unanswerable question was correctly refused.
+8. **Processing is spread across stages, and the four model-bound stages run one after another.** Server timings for the ~2-minute clip: audio 2.7 s, transcription 3.6 s, title 3.7 s, summary 1.0 s, findings 2.5 s, embedding and indexing 2.9 s (total 16.9 s). Title, summary, findings and embedding each read only the transcript ([`backend/jobs.py`](../backend/jobs.py), the `title` → `rag` block), yet they run in sequence: 10.2 s together, while the slowest of them alone is 3.7 s.
+9. **Questions take about 3.4–4.5 s live**, against a local warm p50 of 2.1 s in the evaluation. Retrieval is 0.6–0.9 s of that, mostly the remote embedding of the question (dense step 491–602 ms); keyword search and fusion are under 2 ms and reranking 80–297 ms. The rest is the model call (Gemini 2.5 Flash, first route) and the network. The unanswerable question was correctly refused.
+11. **The upload time is network, not server.** The API logged `upload_body` 1 ms and `upload_copy` 0 ms for the 733 KB file, so the 23.7 s happened before the handler ran (client to Render's edge over the mobile link).
 10. **The per-visitor limit does not identify visitors reliably (confirmed).** Twelve identical `/usage` calls from one laptop, a minute after its analysis, came back as two different identities: 4 times with 0 analyses left, 8 times with 1 left. My own upload's counter was attached to an identity that later `/usage` calls often did not see. The server identifies visitors by the TCP peer address (`request.client.host`, [`backend/api.py`](../backend/api.py) `_identity`), and that address changes between requests from the same device, either because of Render's proxy layer or the mobile carrier's address pool. Effect: one visitor can get more than 1 analysis per day by retrying, and unrelated visitors can share an allowance. The site-wide cap (5 analyses per day) still holds, so cost stays bounded.
 
 ## Improvement ideas (ranked by measured impact)
@@ -115,11 +118,12 @@ All three used the first route in the chain (no fallback). Retrieval returned 4 
 | 4 | Shrink uploads in the browser for large files | Findings 2 and 7: about 31 KB/s on mobile; upload is 58% of the wait | Less upload time on slow links | The earlier ffmpeg.wasm experiment saved only ~3% on already-compressed demo MP3s and adds 32 MB of wasm ([BROWSER_MEDIA_EXPERIMENT.md](BROWSER_MEDIA_EXPERIMENT.md)); worth it only for video files, where dropping the video track is the real saving |
 | 5 | Say which limit was hit: return per-visitor and site-wide remaining separately in `/usage` and show both | Finding 3 | Visitors understand why they cannot upload | Small backend + frontend change |
 | 6 | Wake the API when the web app loads, before the visitor picks a file (the home page already calls `/demo-mode`; show progress while it wakes) | Finding 1: 32.5 s cold start | Hides most of the cold start behind file selection | Small; a keep-alive pinger would avoid sleep entirely but uses free-tier hours and is against the free-tier spirit, so not recommended |
-| 7 | Run title and summary in parallel (both read only the transcript) | Finding 8: title 3.5 s + summary 2.2 s run one after another | About 2 s less processing per job | Small change in `backend/jobs.py`; two provider calls at once may hit free-tier per-minute limits sooner |
+| 7 | Run title, summary, findings and embedding concurrently (all read only the transcript) | Finding 8: 10.2 s in sequence, slowest single stage 3.7 s | Up to about 6 s less processing per job (16.9 s → roughly 11 s); hypothesis until measured | Moderate: `backend/jobs.py` stage order, step reporting for the UI, per-job provider budget accounting under concurrency, and free-tier per-minute limits; needs tests |
 
 ## Still to measure
 
-- Server stage timings from the API logs (`upload_copy`, `media_processing`, `transcription`, `title`, `summary`, `extract`, `embedding_indexing`, `time_to_result`) and peak memory from Render Metrics for the 2026-11-16 run.
+- Peak memory from Render Metrics for the 2026-11-16 run.
+- Model-call duration per question as a server metric (the logs have retrieval stages but no generation timer).
 - A longer clip (the 10-minute limit) to see how transcription and embedding scale.
 - Which layer changes the client address (Render's proxies or the mobile carrier), by repeating the twelve-call `/usage` test from a fixed-address network.
 - More than one run of each, at different times of day, to see variance and provider rate-limit effects.
