@@ -75,7 +75,7 @@ flowchart LR
 | Question latency (local, warm) | p50 2.1 s, p95 5.1 s | same |
 | Memory peak under 512 MiB / 0.1 CPU limit | 425.0 MiB (was 465.2) | [Audit performance notes](docs/engineering-audit/performance-and-optimization.md) |
 | Live: cold start | 32.5 s and 32.6 s (two days) | [LIVE_PERFORMANCE](docs/LIVE_PERFORMANCE.md) |
-| Live: ~2-minute clip, upload → notes ready | 40.7 s (23.7 s upload on mobile + 17.0 s processing) | same |
+| Live: ~2-minute clip, upload → notes ready | 40.7 s (23.7 s upload request on mobile, including first-request server warm-up, + 17.0 s processing) | same |
 | Live: question latency | 3.4–4.5 s (n=3) | same |
 | Live: first page paint (first / repeat visit) | 500–580 ms / 144–164 ms | same |
 

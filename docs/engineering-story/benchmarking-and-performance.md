@@ -98,7 +98,7 @@ FROM provider_attempts WHERE job_id = '<job id>' ORDER BY id;
 
 | Measurement | Value | Env | Tag |
 | --- | --- | --- | --- |
-| Time from client to server over a real network | Live API, mobile hotspot client: `/ready` p50 0.32 s, p95 0.44 s (n=10); cold start 32.5 s; a refused 733,251-byte upload took 25.3 s ([LIVE_PERFORMANCE](../LIVE_PERFORMANCE.md)) | n/a | Measured once, 2026-11-13 |
+| Time from client to server over a real network | Live API, mobile hotspot client: `/ready` p50 0.32 s, p95 0.44 s (n=10); cold start 32.5 s; a refused 733,251-byte upload request took 25.3 s, including first-request preflight ([LIVE_PERFORMANCE](../LIVE_PERFORMANCE.md)) | n/a | Measured once, 2026-11-13 |
 | Server job time to result, 120 s clip, loopback, mocked providers: first / overlapping / warm | 4.218 s / 0.381 s / 0.336 s | C | Measured |
 | Same, Linux ARM64 at 0.1 CPU (audit 1) | 19.468 s / 5.081 s / 2.724 s | B | Measured |
 | Same, 12 Nov gate (cold / warm) | 70.30 s / 13.20 s | D | Measured |
@@ -246,7 +246,7 @@ xychart-beta
 
 | Gap | Why it is empty | Procedure |
 | --- | --- | --- |
-| Upload duration over a real network | Partly measured: one refused 733,251-byte upload took 25.3 s end to end on a mobile hotspot, because the body is read before the quota check ([LIVE_PERFORMANCE](../LIVE_PERFORMANCE.md)); an accepted 733,251-byte upload took 23.7 s on 2026-11-16 | After approval and with the 1-job-per-IP-per-day quota in mind, run `curl -o /dev/null -w '%{time_total} %{size_upload}\n' -F file=@clip.mp4 -F demo_acknowledged=true https://<backend>/jobs` (form fields from the benchmark script), from the network under test. Server-side `metric=upload_body` and `metric=upload_copy` log lines give body read and copy times. |
+| Upload duration over a real network | Partly measured: one refused 733,251-byte upload request took 25.3 s end to end on a mobile hotspot (the body is read before the quota check; the request also included untimed first-request preflight) ([LIVE_PERFORMANCE](../LIVE_PERFORMANCE.md)); an accepted 733,251-byte upload request took 23.7 s on 2026-11-16, including untimed preflight, so pure transfer time is still unseparated | After approval and with the 1-job-per-IP-per-day quota in mind, run `curl -o /dev/null -w '%{time_total} %{size_upload}\n' -F file=@clip.mp4 -F demo_acknowledged=true https://<backend>/jobs` (form fields from the benchmark script), from the network under test. Server-side `metric=upload_body` and `metric=upload_copy` log lines give body read and copy times. |
 | Real-media compression ratio | Only synthetic clips measured | Run the browser experiment with licensed real speech video (commands in [BROWSER_MEDIA_EXPERIMENT](../BROWSER_MEDIA_EXPERIMENT.md)) and compare bytes. |
 | Hosted Render RSS and CPU | Stack is deployed; reading pending the live pipeline run ([LIVE_PERFORMANCE](../LIVE_PERFORMANCE.md)) | During an approved synthetic smoke test, read Render's memory/CPU metrics. Offline proxy: the gate in 1.1. |
 | Native AMD64 gate on current head | CI results not in repo | Read the Actions artifacts for the run on the head commit (`gh run view`, read-only), then quote them. Pending per [ROADMAP_STATUS](../ROADMAP_STATUS.md). |
