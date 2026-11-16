@@ -104,7 +104,7 @@ Full reasoning, alternatives and trade-offs: [architecture-and-decisions.md](arc
 | BM25 in memory instead of Postgres FTS | Plan changed on 2026-11-11; reason not documented beyond the plan note | Implemented |
 | RRF (k=60) | Deterministic fusion of two top-10 lists | Implemented |
 | FlashRank TinyBERT reranker | Mandatory; failure stops generation | Implemented (value on real data not shown) |
-| Browser audio extraction | Not enabled | Experimental, rejected |
+| Browser audio extraction | Web Audio decodes videos to 16 kHz mono WAV before upload (8.1× smaller for a 2 Mbps 720p video) | Implemented, verified in desktop Chromium; the earlier ffmpeg.wasm version was rejected |
 | SSE / streaming | Polling with backoff chosen | Not implemented |
 | Job management | BackgroundTasks + Postgres slots + manual recovery | Implemented; no checkpointing |
 | Remote MCP on Cloudflare Worker | 4 read-only tools via Hyperdrive | Implemented, separate deploy |
@@ -124,7 +124,7 @@ Full reasoning, alternatives and trade-offs: [architecture-and-decisions.md](arc
 | Observability | log lines only | | | | External metrics sink |
 | Caching | | | | | Yes (none beyond singletons) |
 | SSE / streaming | | | | | Yes |
-| Browser preprocessing | | | | yes, rejected | |
+| Browser audio extraction | yes (Web Audio) | desktop Chromium: 31.8 MB video → 3.9 MB upload | Phones, Safari, Firefox; Opus | ffmpeg.wasm, rejected | |
 | YouTube | CLI only | | | | Live API (URLs rejected) |
 | MCP Worker | yes | local runtime tests, Wrangler dry run; deployed, smoke test passed (401 without token, 4 tools, list_videos) per [DEPLOYMENT_REPORT](../../DEPLOYMENT_REPORT.md) | Authenticated tool latency | | |
 | DeepEval | yes (v1) | report | Multi-source goldens, human review | | |

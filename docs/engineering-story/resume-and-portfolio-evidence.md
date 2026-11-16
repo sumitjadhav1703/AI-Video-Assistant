@@ -53,14 +53,14 @@ Purpose: resume bullets and interview talking points for AI Video Assistant, eac
 
 ## 7. Experiments
 
-- **Browser-side audio extraction (ffmpeg.wasm): worked on 3 synthetic clips, saved about 3% of bytes, needs a 32,232,419-byte GPL-2.0-or-later core. Rejected.** Timing matched native (for example 10 min clip: 1,025 ms vs 1,039 ms). Source: [BROWSER_MEDIA_EXPERIMENT.md](../BROWSER_MEDIA_EXPERIMENT.md). Status: Experimental, rejected. Upload-time or bandwidth benefit: Not measured.
+- **Browser-side audio extraction: rejected with ffmpeg.wasm, then shipped with the browser's own Web Audio API.** The first test used synthetic videos and saved about 3% for a 32 MB GPL download, so it was rejected. Re-testing with real speech under a 2 Mbps 720p video showed the earlier test could not see the gain: the built-in decoder cut a 31,795,914-byte video to a 3,904,044-byte WAV (8.1×) in about 40 ms with no library. Source: [BROWSER_MEDIA_EXPERIMENT.md](../BROWSER_MEDIA_EXPERIMENT.md). Status: Implemented (PR #9), desktop Chromium only. Upload-time saving on a real network: Not measured.
 - **Local BGE-small embeddings: recall@4 1.000 dense, 0.917 after RRF, 0.833 after rerank on 12 synthetic questions; kept offline.** Source: [BENCHMARK_NOTES.md](../BENCHMARK_NOTES.md). Status: Experimental, not hosted.
 - **v2 RAG pipeline A/B: HTTP 503s 5 to 0 and behaviour accuracy 0.839 to 1.000, but Answer Relevancy 0.981 to 0.941 and e2e p95 4,519 to 6,289 ms (latency gate failed).** Source: [v2 README](../../future-improvements/v2-rag-pipeline/README.md), [comparison report](../../future-improvements/v2-rag-pipeline/reports/comparison_v1-pinned_vs_v2-iter1.md). Status: Experimental, parked. Conditions: 31 paired questions (latency n=24), interim, incomplete.
 - **Offline chunking what-if:** sentence-packed chunks raised MRR 0.885 to 0.938 with 8% less context but covered slightly less evidence (0.957 vs 0.974); 20 of 21 current boundaries cut mid-word or mid-sentence. Source: [EVALUATION_REPORT §8.1](../../evaluation/EVALUATION_REPORT.md). Status: Verified offline; not shipped. Goldens were written against current chunks, which biases this.
 
 ## 8. Trade-offs
 
-See section 10 for how to phrase them. Items: free tier over paid models (more failovers, slower tail); hybrid retrieval kept despite no gain on one small source; polling instead of streaming ([Not implemented](../../web/src/App.jsx), 3 s then 5 s with backoff); manual recovery instead of auto-recovery; browser preprocessing rejected.
+See section 10 for how to phrase them. Items: free tier over paid models (more failovers, slower tail); hybrid retrieval kept despite no gain on one small source; polling instead of streaming ([Not implemented](../../web/src/App.jsx), 3 s then 5 s with backoff); manual recovery instead of auto-recovery; browser preprocessing rejected with ffmpeg.wasm, then shipped with Web Audio.
 
 ## 9. Pending validation: do not claim yet
 
@@ -80,7 +80,7 @@ See section 10 for how to phrase them. Items: free tier over paid models (more f
 ## 10. How to talk about trade-offs
 
 - **v2 parked for latency.** "v2 fixed the failures it targeted: 503s went from 5 to 0 on 31 paired questions. But p95 latency rose from 4.5 s to 6.3 s and failed my own gate, and the comparison was incomplete. I parked it with the patch and the reports in the repo rather than ship something I had not finished measuring."
-- **Browser compression rejected.** "It worked and matched native speed, but saved about 3% of bytes on synthetic files, needs a 32 MB GPL-licensed wasm core, and I could not test low-power devices. No measured benefit, so I did not add it."
+- **Browser compression: rejected, then revisited.** "My first test used synthetic videos, saved 3% and needed a 32 MB GPL library, so I rejected it. When live measurements showed upload time dominated, I re-tested with realistic video and found the test media had hidden the benefit; the browser's own audio decoder gives an 8× smaller upload with no library, so I shipped that and kept the size and fallback limits explicit."
 - **Manual recovery instead of automatic.** "If a worker dies, the single processing slot stays held until an operator runs the recovery command. I declined automatic recovery on startup because during a Render deploy the old and new instances can overlap, and releasing the slot could run two workers at once. It is a known limitation, documented."
 - **Hybrid retrieval despite a flat result.** "On a 22-chunk talk, dense alone scored as well. I kept hybrid because BM25 protects exact names and numbers that this small set under-tests, and I said so: one short source cannot justify removing it."
 - **Free tier over paid.** "Cost per analysis is $0, but free models reject more outputs and fail over more, which shows up as a slower tail: p50 1,944 ms on first attempt vs 4,729 ms when failover was needed."
