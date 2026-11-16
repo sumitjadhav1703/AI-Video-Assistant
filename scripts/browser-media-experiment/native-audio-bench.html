@@ -1,0 +1,52 @@
+<!doctype html><meta charset="utf-8"><pre id="out">running</pre>
+<script type="module">
+const RATE = 16000;
+function wav(samples) {
+  const out = new DataView(new ArrayBuffer(44 + samples.length * 2));
+  const str = (o, s) => [...s].forEach((c, i) => out.setUint8(o + i, c.charCodeAt(0)));
+  str(0, 'RIFF'); out.setUint32(4, 36 + samples.length * 2, true); str(8, 'WAVEfmt ');
+  out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 1, true);
+  out.setUint32(24, RATE, true); out.setUint32(28, RATE * 2, true); out.setUint16(32, 2, true); out.setUint16(34, 16, true);
+  str(36, 'data'); out.setUint32(40, samples.length * 2, true);
+  for (let i = 0; i < samples.length; i++) out.setInt16(44 + i * 2, Math.max(-1, Math.min(1, samples[i])) * 0x7fff, true);
+  return new Uint8Array(out.buffer);
+}
+async function opusBytes(samples) {
+  let bytes = 0, chunks = 0;
+  const enc = new AudioEncoder({ output: (c) => { bytes += c.byteLength; chunks++; }, error: (e) => { throw e; } });
+  enc.configure({ codec: 'opus', sampleRate: RATE, numberOfChannels: 1, bitrate: 24000 });
+  const frame = RATE; // 1 s of audio per AudioData
+  for (let i = 0; i < samples.length; i += frame) {
+    const part = samples.subarray(i, i + frame);
+    enc.encode(new AudioData({ format: 'f32-planar', sampleRate: RATE, numberOfFrames: part.length, numberOfChannels: 1,
+      timestamp: Math.round(i / RATE * 1e6), data: part }));
+  }
+  await enc.flush(); enc.close();
+  return { bytes, chunks };
+}
+const results = [];
+window.wavOut = {};
+for (const name of ['speech-2min.mp3', 'video-1min-720p.mp4', 'video-2min-720p.mp4']) {
+  const t0 = performance.now();
+  const input = await (await fetch(name)).arrayBuffer();
+  const t1 = performance.now();
+  const ctx = new OfflineAudioContext(1, RATE, RATE);
+  const decoded = await ctx.decodeAudioData(input.slice(0));
+  const t2 = performance.now();
+  let mono = decoded.getChannelData(0);
+  if (decoded.numberOfChannels > 1) {
+    const b = decoded.getChannelData(1); mono = mono.map((v, i) => (v + b[i]) / 2);
+  }
+  const t3 = performance.now();
+  const w = wav(mono);
+  const t4 = performance.now();
+  let opus = null, opusMs = null;
+  try { const s = performance.now(); opus = await opusBytes(mono); opusMs = Math.round(performance.now() - s); } catch (e) { opus = String(e); }
+  window.wavOut[name] = w;
+  results.push({ name, input_bytes: input.byteLength, seconds: +(decoded.duration).toFixed(1), channels_in: decoded.numberOfChannels,
+    fetch_ms: Math.round(t1 - t0), decode_resample_ms: Math.round(t2 - t1), downmix_ms: Math.round(t3 - t2), wav_encode_ms: Math.round(t4 - t3),
+    wav_bytes: w.byteLength, opus_24k_bytes: opus?.bytes ?? opus, opus_encode_ms: opusMs,
+    heap_mb: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1048576) : null });
+}
+document.getElementById('out').textContent = JSON.stringify(results);
+</script>
