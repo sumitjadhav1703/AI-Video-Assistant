@@ -66,7 +66,7 @@ See section 10 for how to phrase them. Items: free tier over paid models (more f
 
 | Claim someone might want | Why not | How to measure |
 |---|---|---|
-| Hosted (Render) latency or memory | Only local container runs exist | Run the 512 MiB gate on the hosted service and record it |
+| Hosted (Render) pipeline latency or memory | Only API probes and page loads are measured live so far ([LIVE_PERFORMANCE](../LIVE_PERFORMANCE.md)) | Run the 512 MiB gate on the hosted service and record it |
 | Native AMD64 gate on the current head | Local runs are arm64; CI artifacts are not in the repo | Check the CI run for the head commit ([ROADMAP_STATUS gate 1](../ROADMAP_STATUS.md)) |
 | Real users, usage counts, uptime | No analytics sink; telemetry is log-only | Add an external metric sink first |
 | Accuracy on other videos, languages or noisy audio | One English talk with human captions | Multi-source dataset (see [evaluation-strategy §10](evaluation-strategy.md)) |

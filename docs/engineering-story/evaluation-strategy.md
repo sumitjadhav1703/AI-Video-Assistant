@@ -144,7 +144,7 @@ The report states its values are against "the full gold set"; the comparison fil
 | Judge cost, this report's run | $5.6087, 1,284 calls | [§5.1](../../evaluation/EVALUATION_REPORT.md) |
 | Judge cost, all runs in ledger | $9.192293, 2,220 calls | `evaluation/reports/judge_ledger.json` (local, git-ignored; v1 total also in [EVALUATION_REPORT §5.1](../../evaluation/EVALUATION_REPORT.md), v2 total $3.58 in [v2 README](../../future-improvements/v2-rag-pipeline/README.md)) |
 
-Single-question query embedding latency was **Not measured** (45 queries were embedded in one batch, 2,303 ms), so end-to-end figures understate live latency. Hosted (Render) latency is also **Not measured**.
+Single-question query embedding latency was **Not measured** (45 queries were embedded in one batch, 2,303 ms), so end-to-end figures understate live latency. Hosted (Render) question latency is pending; the live API itself answers `/ready` in 0.32 s p50 from the client ([LIVE_PERFORMANCE](../LIVE_PERFORMANCE.md)).
 
 Rejected model outputs: 14 of 57 responses (5 crossed a chunk boundary, 4 differed only in spacing, 3 were stitched quotes, 2 were empty abstentions, 0 fabricated). Rejections cause the failover tail above. [Verified] ([§7](../../evaluation/EVALUATION_REPORT.md))
 
