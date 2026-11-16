@@ -61,8 +61,9 @@ def run(base, media, questions, poll_seconds=1.0, chat_gap=31.0):
     out = {'started_utc': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), 'backend': base}
     status, elapsed, _ = call(base + '/health', timeout=180)
     out['health_first'] = {'status': status, 'seconds': elapsed}
-    ready = [call(base + '/ready')[1] for _ in range(10)]
-    out['ready_10'] = summary(ready)
+    ready = [call(base + '/ready') for _ in range(10)]
+    out['ready_10'] = {**summary([seconds for _, seconds, _ in ready]),
+                       'failed': sum(status != 200 for status, _, _ in ready)}
     out['demo_mode'] = call(base + '/demo-mode')[2]
     out['usage_before'] = (call(base + '/usage')[2] or {}).get('remaining')
 
@@ -75,7 +76,24 @@ def run(base, media, questions, poll_seconds=1.0, chat_gap=31.0):
         return out
     job_id, auth = job['job_id'], {'Authorization': 'Bearer ' + job['job_token']}
     jobs = f'{base}/jobs/{job_id}'
+    try:
+        measure_job(out, jobs, auth, questions, poll_seconds, chat_gap)
+    except Exception as error:  # keep what was measured and still try to delete the job
+        out['aborted'] = f'{type(error).__name__}: {error}'
+    finally:
+        try:
+            status, elapsed, _ = call(jobs, 'DELETE', headers=auth)
+            out['delete'] = {'status': status, 'seconds': elapsed}
+        except Exception as error:
+            out['delete'] = {'error': type(error).__name__}
+        try:
+            out['usage_after'] = (call(base + '/usage')[2] or {}).get('remaining')
+        except Exception as error:
+            out['usage_after'] = {'error': type(error).__name__}
+    return out
 
+
+def measure_job(out, jobs, auth, questions, poll_seconds, chat_gap):
     t0, last, transitions, polls = time.perf_counter(), None, [], []
     while True:
         status, elapsed, state = call(jobs, headers=auth, timeout=30)
@@ -108,10 +126,6 @@ def run(base, media, questions, poll_seconds=1.0, chat_gap=31.0):
                                  'abstained': reply.get('abstained'), 'citations': len(reply.get('citations') or []),
                                  'answer_chars': len(reply.get('answer') or ''), 'model': reply.get('model'),
                                  'retrieval': reply.get('retrieval'), 'detail': reply.get('detail')})
-    status, elapsed, _ = call(jobs, 'DELETE', headers=auth)
-    out['delete'] = {'status': status, 'seconds': elapsed}
-    out['usage_after'] = (call(base + '/usage')[2] or {}).get('remaining')
-    return out
 
 
 def main(argv=None):
