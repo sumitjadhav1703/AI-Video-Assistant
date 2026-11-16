@@ -179,7 +179,7 @@ Other: 21 s clip rerank 11 ms and 3 ms (J). FlashRank cold load 0.098 s, warm 0.
 | Chat per question, warm (n=40) | p50 2,085, p95 5,128, p99 7,946, mean 2,557, max 9,474 ms | K |
 | Chat including cold (n=43) | p50 2,211, p95 5,068 ms | K |
 | 21 s clip, analysis time to result | 6,187 ms (J); 8.1 s (I) | J, I |
-| Hosted Render / Vercel path from a real browser | Vercel first visit: first paint 500–580 ms, 96 KB JS; repeat visit 144–164 ms; app's `/usage` call 257 ms first, 145 ms repeat ([LIVE_PERFORMANCE](../LIVE_PERFORMANCE.md)) | Full pipeline from the browser still pending |
+| Hosted Render / Vercel path from a real browser | Vercel first visit: first paint 500–580 ms, 96 KB JS; repeat visit 144–164 ms; app's `/usage` call 257 ms first, 145 ms repeat ([LIVE_PERFORMANCE](../LIVE_PERFORMANCE.md)) | One full pipeline run via `scripts/measure_live.py` on 2026-11-16: upload 23.7 s, processing 17.0 s, questions 3.4–4.5 s ([LIVE_PERFORMANCE](../LIVE_PERFORMANCE.md)) |
 
 **Two separate 21 s runs.** Run I ([LOCAL_RUN_CHECK](../LOCAL_RUN_CHECK.md)) took 8.1 s and run J ([usage_measurement.json](../usage_measurement.json)) took 6,187 ms. Both are 21 s synthetic clips on the production image at 512 MiB, but they are different runs on different routes and the sources do not explain the 1.9 s gap. They are not averaged. Stage sums: run J itemises 5,895 ms of 6,187 ms (my sum; 292 ms is not itemised); run I itemises about 8.05 s of 8.1 s.
 
@@ -246,7 +246,7 @@ xychart-beta
 
 | Gap | Why it is empty | Procedure |
 | --- | --- | --- |
-| Upload duration over a real network | Partly measured: one refused 733,251-byte upload took 25.3 s end to end on a mobile hotspot, because the body is read before the quota check ([LIVE_PERFORMANCE](../LIVE_PERFORMANCE.md)); accepted-upload timing pending | After approval and with the 1-job-per-IP-per-day quota in mind, run `curl -o /dev/null -w '%{time_total} %{size_upload}\n' -F file=@clip.mp4 -F demo_acknowledged=true https://<backend>/jobs` (form fields from the benchmark script), from the network under test. Server-side `metric=upload_body` and `metric=upload_copy` log lines give body read and copy times. |
+| Upload duration over a real network | Partly measured: one refused 733,251-byte upload took 25.3 s end to end on a mobile hotspot, because the body is read before the quota check ([LIVE_PERFORMANCE](../LIVE_PERFORMANCE.md)); an accepted 733,251-byte upload took 23.7 s on 2026-11-16 | After approval and with the 1-job-per-IP-per-day quota in mind, run `curl -o /dev/null -w '%{time_total} %{size_upload}\n' -F file=@clip.mp4 -F demo_acknowledged=true https://<backend>/jobs` (form fields from the benchmark script), from the network under test. Server-side `metric=upload_body` and `metric=upload_copy` log lines give body read and copy times. |
 | Real-media compression ratio | Only synthetic clips measured | Run the browser experiment with licensed real speech video (commands in [BROWSER_MEDIA_EXPERIMENT](../BROWSER_MEDIA_EXPERIMENT.md)) and compare bytes. |
 | Hosted Render RSS and CPU | Stack is deployed; reading pending the live pipeline run ([LIVE_PERFORMANCE](../LIVE_PERFORMANCE.md)) | During an approved synthetic smoke test, read Render's memory/CPU metrics. Offline proxy: the gate in 1.1. |
 | Native AMD64 gate on current head | CI results not in repo | Read the Actions artifacts for the run on the head commit (`gh run view`, read-only), then quote them. Pending per [ROADMAP_STATUS](../ROADMAP_STATUS.md). |

@@ -69,6 +69,12 @@ One row per error. Copy the exact error message with any secret removed.
 3. Optional: set Render health check path to `/health` in the dashboard.
 4. Optional: create a Cloudflare API token matching `[A-Za-z0-9_-]+` (Workers + Hyperdrive) if future deploys must use `scripts/release_worker.mjs` exactly.
 
+## Claude Code follow-up (2026-11-16)
+
+- **Live smoke passed** with `scripts/measure_live.py` (one 733 KB, ~2-minute MP3; 3 questions; job deleted afterwards): upload 23.7 s on a mobile hotspot, processing 17.0 s, questions 3.4–4.5 s, unanswerable question correctly refused. Details: [docs/LIVE_PERFORMANCE.md](docs/LIVE_PERFORMANCE.md).
+- **Proxy-IP check: identity is not stable.** Twelve identical `/usage` calls from one laptop came back as two identities (4× 0 analyses left, 8× 1 left). Per-visitor limits are unreliable; the site-wide cap still holds. Open issue 2 is confirmed, not resolved; fix options are in LIVE_PERFORMANCE.md (improvement 1).
+- Server stage timings and memory for this run still need the Render log lines and Metrics.
+
 ## Owner notes
 
 Anything the owner observed in the browser (smoke test, look of the pages, cold-start time).

@@ -74,7 +74,10 @@ flowchart LR
 | Retrieval recall@4 | 0.977 | same |
 | Question latency (local, warm) | p50 2.1 s, p95 5.1 s | same |
 | Memory peak under 512 MiB / 0.1 CPU limit | 425.0 MiB (was 465.2) | [Audit performance notes](docs/engineering-audit/performance-and-optimization.md) |
-| Live: cold start / warm API / page load | see [LIVE_PERFORMANCE](docs/LIVE_PERFORMANCE.md) | measured on the deployment |
+| Live: cold start | 32.5 s and 32.6 s (two days) | [LIVE_PERFORMANCE](docs/LIVE_PERFORMANCE.md) |
+| Live: ~2-minute clip, upload → notes ready | 40.7 s (23.7 s upload on mobile + 17.0 s processing) | same |
+| Live: question latency | 3.4–4.5 s (n=3) | same |
+| Live: first page paint (first / repeat visit) | 500–580 ms / 144–164 ms | same |
 
 The evaluation used one public-domain talk with 45 questions; see the report for its limits.
 
@@ -136,7 +139,7 @@ Deployment follows [SUBMISSION_GUIDELINES.md](SUBMISSION_GUIDELINES.md): Neon �
 ## Known limitations
 
 - **Cold starts** on Render Free: 30–60 s after idle.
-- **Shared allowance:** if Render's proxy hides visitor addresses, all visitors share one identity, so one upload can use the daily per-visitor allowance for everyone (open issue in [DEPLOYMENT_REPORT.md](DEPLOYMENT_REPORT.md)).
+- **Per-visitor limits are unreliable on Render:** the address the server sees for one device changes between requests, so a visitor can get extra analyses by retrying and strangers can share an allowance. The site-wide cap of 5 per day still holds ([LIVE_PERFORMANCE](docs/LIVE_PERFORMANCE.md), finding 10).
 - **Over-limit uploads** are rejected only after the file has been received, so a visitor who is out of allowance still waits for the upload.
 - **Restarts:** a job running during a Render restart is lost and can hold the processing slot until an operator runs `python -m backend.recover` ([runbook](docs/ROADMAP_STATUS.md#recovery-after-an-interrupted-process)).
 - **English uploads only** in the live app; YouTube links work only from the CLI.
