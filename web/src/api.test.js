@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { askChat, getDemoMode, getStatus, getResult, releaseJob, startJob, UPLOAD_TIMEOUT_HINT } from './api.js';
+import { askChat, getDemoMode, getStatus, getResult, releaseJob, startJob, UPLOAD_TIMEOUT_HINT, waitText } from './api.js';
 
 const job = { id: 'job', token: 'capability-secret' };
 
@@ -15,6 +15,20 @@ test('rate limit exposes Retry-After and does not retry a chat write', async () 
   await assert.rejects(askChat(job, 'question'), (error) =>
     error.status === 429 && error.retryAfterMs === 42000 && /Daily limit reached.*42/.test(error.message));
   assert.equal(calls, 1);
+});
+
+test('waitText turns Retry-After into readable time', () => {
+  assert.equal(waitText(45000), '45 seconds');
+  assert.equal(waitText(1000), '1 second');
+  assert.equal(waitText(12 * 60000), '12 minutes');
+  assert.equal(waitText(43127000), '12 hours');
+});
+
+test('a daily limit reads in hours, not seconds', async () => {
+  globalThis.fetch = async () => new Response(JSON.stringify({ detail: 'Today’s free demo capacity is used up.' }), {
+    status: 429, headers: { 'Retry-After': '21600', 'Content-Type': 'application/json' },
+  });
+  await assert.rejects(getStatus(job), (error) => /capacity is used up\. Try again in about 6 hours\.$/.test(error.message));
 });
 
 test('status handles date-form Retry-After and has no implicit retries', async () => {

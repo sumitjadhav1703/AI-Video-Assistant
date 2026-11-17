@@ -14,8 +14,9 @@ class UsageSettingsTests(unittest.TestCase):
             settings = Settings.from_env()
         self.assertFalse(settings.provider_calls_enabled)
         self.assertEqual(settings.max_upload_bytes, 25 * 1024 * 1024)
-        self.assertEqual(settings.jobs_per_ip_day, 1)
-        self.assertEqual(settings.jobs_global_day, 5)
+        self.assertEqual(settings.jobs_per_ip_day, 2)
+        self.assertEqual(settings.jobs_global_day, 15)
+        self.assertEqual((settings.chats_per_ip_day, settings.chats_per_job_day, settings.chats_global_day), (30, 5, 60))
 
     def test_provider_enabled_requires_secret(self):
         from backend.usage_limits import Settings

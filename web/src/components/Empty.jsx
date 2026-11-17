@@ -3,6 +3,7 @@ import { InfoLinks } from './InfoShell';
 import { SANS, MONO, CREAM, SUBTLE, MUTE, DIM } from '../lib/theme';
 import { humanSize } from '../lib/parse';
 import { extractAudio, shouldExtract } from '../lib/extractAudio';
+import { getUsage } from '../api';
 
 const ACCEPT = '.mp3,.wav,.m4a,.mp4,.mov,.mkv,.webm,.aac,.ogg,.flac';
 const HERO_WORDS = ['remembered.', 'recorded.', 'summarised.', 'answered.', 'searchable.'];
@@ -43,6 +44,7 @@ export default function Empty({ mode, languages = ['english'], submitting, onAna
   const [dragOver, setDragOver] = useState(false);
   const [heroIdx, setHeroIdx] = useState(0);
   const [sizeError, setSizeError] = useState('');
+  const [capacityNote, setCapacityNote] = useState('');
   const [selectedDemo, setSelectedDemo] = useState(null);
   const [loadingDemo, setLoadingDemo] = useState(null);
   const [demoError, setDemoError] = useState('');
@@ -167,6 +169,16 @@ export default function Empty({ mode, languages = ['english'], submitting, onAna
 
   const invited = mode === 'invited';
   const live = invited || mode === 'public';
+
+  useEffect(() => {
+    // Warn before a pointless upload; the server still decides, since visitor identity is approximate.
+    if (!live) return undefined;
+    const request = new AbortController();
+    getUsage(request.signal).then((usage) => setCapacityNote(usage?.remaining?.analyses_today === 0
+      ? 'Today’s free analyses look used up. Minutes runs on free cloud and AI tiers with a small daily allowance that resets at midnight UTC. You can still try, or explore the Evaluation and How it works pages meanwhile.'
+      : ''), () => {});
+    return () => request.abort();
+  }, [live]);
   const showUploadNotice = live && file && !selectedDemo;
   const canAnalyse = Boolean(live && !submitting && !loadingDemo && !preparing && file && (!invited || inviteCode.trim()));
 
@@ -482,6 +494,7 @@ export default function Empty({ mode, languages = ['english'], submitting, onAna
               </button>
             </p>
           )}
+          {capacityNote && <p role="status" style={noteStyle}>{capacityNote}</p>}
           {notice && <p role="status" style={noteStyle}>{notice}</p>}
           {uploadError && <p role="alert" style={{ ...noteStyle, color: '#d98c7a' }}>{uploadError}</p>}
         </form>

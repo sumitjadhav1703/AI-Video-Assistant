@@ -1,6 +1,15 @@
 // Vite proxies /api during development. Production uses the public backend URL.
 const ENV = import.meta.env || {};
 const PROD_RAW = ENV.VITE_BACKEND_URL || '';
+// "45 seconds", "12 minutes", "6 hours": a daily limit should not read as 43127 seconds.
+export function waitText(ms) {
+  const seconds = Math.ceil(ms / 1000);
+  const unit = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  if (seconds < 90) return unit(seconds, 'second');
+  if (seconds < 90 * 60) return unit(Math.round(seconds / 60), 'minute');
+  return unit(Math.round(seconds / 3600), 'hour');
+}
+
 export const BACKEND_URL = ENV.PROD ? PROD_RAW.trim().replace(/\/+$/, '') : '/api';
 
 const TIMEOUT = 180000;
@@ -51,7 +60,7 @@ async function callBackend(method, path, { body, headers, signal, valid, timeout
       retryAfterMs = /^\d+$/.test(retryAfter)
         ? Number(retryAfter) * 1000
         : Math.max(0, Date.parse(retryAfter) - Date.now()) || 0;
-      if (retryAfterMs) message += ` Try again in ${Math.ceil(retryAfterMs / 1000)} seconds.`;
+      if (retryAfterMs) message += ` Try again in about ${waitText(retryAfterMs)}.`;
     }
     throw new BackendError(message, response.status, retryAfterMs);
   } catch (error) {
