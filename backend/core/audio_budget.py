@@ -4,7 +4,7 @@ import os
 import re
 from dataclasses import dataclass
 
-from ..usage_limits import LimitExceeded, require_provider_calls
+from ..usage_limits import LimitExceeded, PROVIDER_QUOTA_MESSAGE, require_provider_calls
 
 AUDIO_SCHEMA = '''
 CREATE TABLE IF NOT EXISTS audio_attempts (
@@ -100,11 +100,11 @@ def reserve_audio_attempt(job_id: str, profile: AudioProfile, duration_ms: int) 
                     (profile.provider, profile.model))
         used = cur.fetchone()
         if used['rpd'] + 1 > profile.rpd or used['day_ms'] + duration_ms > profile.audio_seconds_day * 1000:
-            raise LimitExceeded(86400)
+            raise LimitExceeded(86400, PROVIDER_QUOTA_MESSAGE)
         if used['hour_ms'] + duration_ms > profile.audio_seconds_hour * 1000:
-            raise LimitExceeded(3600)
+            raise LimitExceeded(3600, PROVIDER_QUOTA_MESSAGE)
         if used['rpm'] + 1 > profile.rpm:
-            raise LimitExceeded(60)
+            raise LimitExceeded(60, PROVIDER_QUOTA_MESSAGE)
         cur.execute('INSERT INTO audio_attempts(job_id,provider,model,duration_ms) VALUES (%s,%s,%s,%s) RETURNING id',
                     (job_id, profile.provider, profile.model, duration_ms))
         result = cur.fetchone()['id']

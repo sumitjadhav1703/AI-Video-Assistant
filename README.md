@@ -88,12 +88,12 @@ Free model tiers are shared, so limits are strict and enforced in Postgres (they
 
 | Work | Limit |
 |---|---|
-| Analyses | 1 per visitor and 5 across all visitors per UTC day |
-| Questions | 2 per minute and 15 per day per visitor, 3 per recording, 15 site-wide |
+| Analyses | 2 per visitor and 15 across all visitors per UTC day |
+| Questions | 2 per minute and 30 per day per visitor, 5 per recording, 60 site-wide |
 | Concurrency | One analysis and one question at a time, site-wide |
 | Media | Audio 25 MiB; video up to 250 MiB, reduced to its audio in the browser; first 10 minutes analysed |
 
-Over-limit requests get `429` with `Retry-After`. A rejected request never consumes allowance; an accepted request that later fails does. Visitors are identified by connection address, never by forwarded headers.
+Over-limit requests get `429` with `Retry-After` and a plain explanation of which limit was hit (your share, the site's daily capacity, this recording's questions, or one-at-a-time processing) and when it resets; the upload page warns before uploading when today's analyses are used up. A rejected request never consumes allowance; an accepted request that later fails does. Visitors are identified by connection address, never by forwarded headers.
 
 ## Run it locally
 

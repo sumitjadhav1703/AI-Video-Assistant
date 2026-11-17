@@ -53,7 +53,7 @@ class TimestampRegressionTests(unittest.TestCase):
 class LimitRegressionTests(unittest.TestCase):
     def test_chats_per_ip_day_is_capped_like_the_other_limits(self):
         with patch.dict(os.environ, {'CHATS_PER_IP_DAY': '100000'}):
-            self.assertEqual(Settings.from_env().chats_per_ip_day, 20)
+            self.assertEqual(Settings.from_env().chats_per_ip_day, 30)
 
 
 @unittest.skipUnless(os.getenv('TEST_DATABASE_URL'), 'isolated loopback Postgres required')

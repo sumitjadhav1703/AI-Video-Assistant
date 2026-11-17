@@ -37,7 +37,7 @@ Do these before handing this file to the deployment agent.
 
 Free-tier facts the owner should know:
 - **Render Free sleeps after ~15 minutes idle.** The first request after sleep takes about a minute; the app shows a "waking up" hint.
-- **Daily limits are deliberate:** 1 analysis per visitor per day, 5 across all visitors, 2 questions per minute and 15 per day per visitor, 3 per recording ([`backend/usage_limits.py`](backend/usage_limits.py), [`render.yaml`](render.yaml)).
+- **Daily limits are deliberate:** 2 analyses per visitor per day, 15 across all visitors, 2 questions per minute, 30 per day per visitor, 5 per recording and 60 across all visitors ([`backend/usage_limits.py`](backend/usage_limits.py), [`render.yaml`](render.yaml)).
 - **One upload at a time** across the whole site (one global processing slot).
 
 ---
@@ -107,12 +107,12 @@ Plain values (not secret):
 | `ENABLE_GEMINI_EMBEDDINGS` | `false` (embeddings use `EMBEDDING_ROUTES_JSON` instead) |
 | `MAX_UPLOAD_MB` | `25` |
 | `MAX_MEDIA_SECONDS` | `600` |
-| `JOBS_PER_IP_DAY` | `1` |
-| `JOBS_GLOBAL_DAY` | `5` |
+| `JOBS_PER_IP_DAY` | `2` |
+| `JOBS_GLOBAL_DAY` | `15` |
 | `CHATS_PER_IP_MINUTE` | `2` |
-| `CHATS_PER_IP_DAY` | `15` |
-| `CHATS_PER_JOB_DAY` | `3` |
-| `CHATS_GLOBAL_DAY` | `15` |
+| `CHATS_PER_IP_DAY` | `30` |
+| `CHATS_PER_JOB_DAY` | `5` |
+| `CHATS_GLOBAL_DAY` | `60` |
 | `FRONTEND_ORIGIN` | `http://localhost:5173` for now (replaced in step 4) |
 
 Secret values (set via the Render MCP secret/env tool; never print):

@@ -4,7 +4,7 @@ import os
 from decimal import Decimal, InvalidOperation
 from collections import defaultdict
 
-from ..usage_limits import LimitExceeded
+from ..usage_limits import LimitExceeded, PROVIDER_QUOTA_MESSAGE
 
 BUDGET_SCHEMA = """
 CREATE TABLE IF NOT EXISTS provider_operation_budgets (
@@ -38,6 +38,9 @@ CREATE INDEX IF NOT EXISTS provider_attempts_job ON provider_attempts(job_id);
 
 class RouteQuotaExceeded(LimitExceeded):
     """A route or provider is unavailable without exhausting the job budget."""
+
+    def __init__(self, retry_after: int):
+        super().__init__(retry_after, PROVIDER_QUOTA_MESSAGE)
 
 
 class JobBudgetExceeded(ValueError):

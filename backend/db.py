@@ -3,7 +3,7 @@ import math
 import uuid
 from datetime import timedelta, timezone
 
-from .usage_limits import Settings, LimitExceeded, JobUnavailable, JobBusy
+from .usage_limits import Settings, LimitExceeded, JobUnavailable, JobBusy, limit_message
 
 import psycopg
 from psycopg import sql
@@ -300,13 +300,14 @@ def _reserve(cur, slot: str, job_id: str, identity: str, settings: Settings) -> 
                     (bucket, scope, subject))
         row = cur.fetchone()
         if row and row['count'] >= ceiling:
-            raise LimitExceeded(math.ceil((bucket + timedelta(seconds=seconds) - now).total_seconds()))
+            raise LimitExceeded(math.ceil((bucket + timedelta(seconds=seconds) - now).total_seconds()),
+                                limit_message(scope, settings))
     cur.execute("SELECT owner_token FROM usage_slots WHERE name=%s", (slot,))
     row = cur.fetchone()
     if row is None:
         raise RuntimeError('Usage slot is missing')
     if row['owner_token'] is not None:
-        raise LimitExceeded(60)
+        raise LimitExceeded(60, limit_message(f'busy_{slot}', settings))
     # Retain current and recent buckets; this never refunds today's usage.
     cur.execute("DELETE FROM usage_counters WHERE bucket < %s", (day - timedelta(days=2),))
     token = uuid.uuid4().hex
