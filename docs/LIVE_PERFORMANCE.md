@@ -96,7 +96,7 @@ All three used the first route in the chain (no fallback). Retrieval returned 4 
 
 ### After the speed-ups (one run, 2026-11-17)
 
-Same clip, same client (mobile hotspot), same script. Deployed: `main` at `b75c71a`, which adds concurrent note stages (PR #9), browser audio extraction (not used here: the clip is already an MP3), raised limits and plain limit messages (PR #10). Embeddings now use Cloudflare first. Outside timings only; server log lines for this run were not collected.
+Same clip, same client (mobile hotspot), same script. Deployed: `main` at `b75c71a`, which adds concurrent note stages (PR #9), browser audio extraction (not used here: the clip is already an MP3), raised limits and plain limit messages (PR #10). The configured embedding route order now starts with Cloudflare; which route this job actually used was not recorded. Outside timings only; server log lines for this run were not collected.
 
 | Measure | 2026-11-16 (before) | 2026-11-17 (after) |
 |---|---|---|
@@ -111,7 +111,7 @@ Same clip, same client (mobile hotspot), same script. Deployed: `main` at `b75c7
 
 Readings:
 - Processing dropped by 2.8 s (16%), less than the estimated 6 s. The title step now spans 6.4 s → 12.9 s (6.5 s against 3.7 s before), so with four model calls at once the slowest call took longer. One run, so this may be provider variance; server stage logs would separate the two.
-- Questions were slower this run (4.0–7.2 s). Each question now embeds through Cloudflare first instead of Gemini, and provider latency varies; not yet separated.
+- Questions were slower this run (4.0–7.2 s). The cause is not established: Cloudflare is now first in the embedding route order, but indexing can fall back to another route and each question uses the route its job was indexed with, and this run has no server logs, so which embedding route served these questions is unknown. Provider latency also varies between runs.
 - Live limits now read 2 / 15 analyses and 30 / 5 / 60 questions per visitor / recording / site per day (`/usage`).
 
 ## Findings
