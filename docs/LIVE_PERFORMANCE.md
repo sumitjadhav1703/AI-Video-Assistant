@@ -94,6 +94,26 @@ All three used the first route in the chain (no fallback). Retrieval returned 4 
 | What examples of generated content are mentioned? | 4.54 s | no | 2 | Gemini 2.5 Flash |
 | Who won the 2022 FIFA World Cup? (not in the clip) | 3.37 s | **yes** (correct) | 0 | Gemini 2.5 Flash |
 
+### After the speed-ups (one run, 2026-11-17)
+
+Same clip, same client (mobile hotspot), same script. Deployed: `main` at `b75c71a`, which adds concurrent note stages (PR #9), browser audio extraction (not used here: the clip is already an MP3), raised limits and plain limit messages (PR #10). Embeddings now use Cloudflare first. Outside timings only; server log lines for this run were not collected.
+
+| Measure | 2026-11-16 (before) | 2026-11-17 (after) |
+|---|---|---|
+| `/ready` p50 / p95 (n=10) | 0.23 s / 0.35 s | 0.23 s / 0.48 s, 0 failed |
+| Upload request | 23.7 s | 23.2 s |
+| Processing, upload returned → done | 17.0 s | **14.2 s** |
+| Step changes seen (polling every 1 s) | audio → transcript → title → summary → extract → rag → done | audio → transcript → title → extract → done: summary and indexing finished alongside the others, so their steps were never seen on their own |
+| Total, start of upload → notes ready | 40.7 s | **37.4 s** |
+| Questions (n=3) | 4.31 / 4.54 / 3.37 s | 5.94 / 7.22 / 4.01 s |
+| Unanswerable question refused | yes | yes |
+| Model that answered | Gemini 2.5 Flash | Gemini 2.5 Flash |
+
+Readings:
+- Processing dropped by 2.8 s (16%), less than the estimated 6 s. The title step now spans 6.4 s → 12.9 s (6.5 s against 3.7 s before), so with four model calls at once the slowest call took longer. One run, so this may be provider variance; server stage logs would separate the two.
+- Questions were slower this run (4.0–7.2 s). Each question now embeds through Cloudflare first instead of Gemini, and provider latency varies; not yet separated.
+- Live limits now read 2 / 15 analyses and 30 / 5 / 60 questions per visitor / recording / site per day (`/usage`).
+
 ## Findings
 
 1. **Cold start dominates the first visit.** A sleeping API took 32.5 s to answer, about 100 times the awake `/ready` time. The app shows a "waking up" message, but every first visitor after 15 idle minutes waits.
@@ -118,7 +138,7 @@ All three used the first route in the chain (no fallback). Retrieval returned 4 
 | 4 | Shrink uploads in the browser for large files (**implemented for video, 2026-11-16**: audio extracted to 16 kHz mono WAV, see [BROWSER_MEDIA_EXPERIMENT.md](BROWSER_MEDIA_EXPERIMENT.md)) | Finding 7: the upload request is 58% of the wait (network share not yet separated, finding 11) | Less upload time on slow links | The earlier ffmpeg.wasm experiment saved only ~3% on already-compressed demo MP3s and adds 32 MB of wasm ([BROWSER_MEDIA_EXPERIMENT.md](BROWSER_MEDIA_EXPERIMENT.md)); worth it only for video files, where dropping the video track is the real saving |
 | 5 | Say which limit was hit: return per-visitor and site-wide remaining separately in `/usage` and show both | Finding 3 | Visitors understand why they cannot upload | Small backend + frontend change |
 | 6 | Wake the API when the web app loads, before the visitor picks a file (the home page already calls `/demo-mode`; show progress while it wakes) | Finding 1: 32.5 s cold start | Hides most of the cold start behind file selection | Small; a keep-alive pinger would avoid sleep entirely but uses free-tier hours and is against the free-tier spirit, so not recommended |
-| 7 | Run title, summary, findings and embedding concurrently (all read only the transcript; **implemented 2026-11-16**, live effect not yet measured) | Finding 8: 10.2 s in sequence, slowest single stage 3.7 s | Up to about 6 s less processing per job (16.9 s → roughly 11 s); hypothesis until measured | Moderate: `backend/jobs.py` stage order, step reporting for the UI, per-job provider budget accounting under concurrency, and free-tier per-minute limits; needs tests |
+| 7 | Run title, summary, findings and embedding concurrently (all read only the transcript; **implemented 2026-11-16**; live: processing 17.0 s → 14.2 s in one run) | Finding 8: 10.2 s in sequence, slowest single stage 3.7 s | Up to about 6 s less processing per job (16.9 s → roughly 11 s); hypothesis until measured | Moderate: `backend/jobs.py` stage order, step reporting for the UI, per-job provider budget accounting under concurrency, and free-tier per-minute limits; needs tests |
 | 8 | Warm the pipeline before the first upload: run `preflight_pipeline` in the background when the service starts, so the first visitor's upload request does not pay for it | Finding 11 | Removes the untimed preflight from the first upload after each wake (size unknown until timed) | Small; must not delay `/health` or the startup Render waits for, and must keep the preflight failure behaviour |
 
 ## Still to measure
