@@ -22,6 +22,9 @@ test('waitText turns Retry-After into readable time', () => {
   assert.equal(waitText(1000), '1 second');
   assert.equal(waitText(12 * 60000), '12 minutes');
   assert.equal(waitText(43127000), '12 hours');
+  assert.equal(waitText(91 * 60000), '2 hours');
+  assert.equal(waitText(61000), '61 seconds');
+  assert.equal(waitText(12 * 60000 + 1000), '13 minutes');
 });
 
 test('a daily limit reads in hours, not seconds', async () => {

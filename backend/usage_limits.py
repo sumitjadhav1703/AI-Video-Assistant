@@ -65,8 +65,8 @@ def client_key(host: str | None, secret: str) -> str:
     return hmac.new(secret.encode(), address.compressed.encode(), hashlib.sha256).hexdigest()
 
 
-PROVIDER_QUOTA_MESSAGE = ("The free AI providers this demo runs on are at their limit right now, so it cannot take "
-                          "more work at the moment. It uses free tiers only.")
+PROVIDER_QUOTA_MESSAGE = ("The AI providers this demo uses have reached their usage limit for now, so it cannot "
+                          "take more work at the moment.")
 
 
 class LimitExceeded(Exception):

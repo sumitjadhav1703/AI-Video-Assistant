@@ -2,12 +2,13 @@
 const ENV = import.meta.env || {};
 const PROD_RAW = ENV.VITE_BACKEND_URL || '';
 // "45 seconds", "12 minutes", "6 hours": a daily limit should not read as 43127 seconds.
+// Rounds up so a visitor never comes back before the limit has reset.
 export function waitText(ms) {
   const seconds = Math.ceil(ms / 1000);
   const unit = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
   if (seconds < 90) return unit(seconds, 'second');
-  if (seconds < 90 * 60) return unit(Math.round(seconds / 60), 'minute');
-  return unit(Math.round(seconds / 3600), 'hour');
+  if (seconds < 90 * 60) return unit(Math.ceil(seconds / 60), 'minute');
+  return unit(Math.ceil(seconds / 3600), 'hour');
 }
 
 export const BACKEND_URL = ENV.PROD ? PROD_RAW.trim().replace(/\/+$/, '') : '/api';
